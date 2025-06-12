@@ -1,0 +1,60 @@
+{
+	"version": "1.0.0",
+	"name": "boards-room",
+	"description": "A collaborative whiteboard application with real-time features.",
+	"repository": "https://github.com/Excali-Boards/boards-room",
+	"author": "Digital39999",
+	"scripts": {
+		"ts": "pnpm install typescript --save-dev -g",
+		"init": "pnpm install && pnpm run build && pnpm run start",
+		"start": "node dist/index.js",
+		"build": "tsc",
+		"watch": "tsc --watch",
+		"rebuild": "pnpm run build && pnpm run migrate && pnpm run start",
+		"afterbuild": "pnpm run migrate && pnpm run start",
+		"postinstall": "pnpm prisma generate",
+		"db:create": "node dist/scripts/db.js",
+		"migrate": "pnpm db:create && pnpm prisma db push",
+		"updates": "pnpm npm-check-updates -i --format group"
+	},
+	"main": "dist/index.js",
+	"license": "GPL-3.0",
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"@prisma/client",
+			"@prisma/engines",
+			"prisma"
+		]
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "3.701.0",
+		"@excalidraw/excalidraw": "0.18.0",
+		"@hono/node-server": "1.13.7",
+		"@msgpack/msgpack": "3.0.0-beta2",
+		"@prisma/client": "5.21.1",
+		"@types/pako": "2.0.3",
+		"dotenv": "16.4.5",
+		"hono": "4.6.12",
+		"lodash.throttle": "4.1.1",
+		"pako": "2.1.0",
+		"pg": "8.16.0",
+		"prisma-cache-all": "^1.0.10",
+		"roughjs": "4.6.6",
+		"socket.io": "4.8.1",
+		"socket.io-msgpack-parser": "3.0.2",
+		"ts-prisma": "1.2.16",
+		"zod": "3.23.8"
+	},
+	"devDependencies": {
+		"@types/pg": "8.15.4",
+		"@typescript-eslint/eslint-plugin": "8.5.0",
+		"@typescript-eslint/parser": "8.5.0",
+		"eslint": "8.57.0",
+		"prisma": "5.21.1",
+		"typescript": "5.5.4",
+		"typescript-eslint": "8.5.0"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
+}
