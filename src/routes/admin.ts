@@ -24,7 +24,9 @@ export default [
 					socketId: collaborator.socketId,
 					username: collaborator.username,
 					avatarUrl: collaborator.avatarUrl,
-				})).filter((collaborator) => collaborator.id && collaborator.socketId && collaborator.username && collaborator.avatarUrl),
+				}))
+					.filter((collaborator) => collaborator.id && collaborator.socketId && collaborator.username && collaborator.avatarUrl)
+					.filter((collaborator, index, self) => self.findIndex((c) => c.id === collaborator.id) === index),
 			}));
 
 			return json(c, 200, { data: rooms });
