@@ -646,16 +646,33 @@ export default [
 			const groupId = c.req.param('groupId');
 			const categoryId = c.req.param('categoryId');
 
-			if (!c.var.privileged) return json(c, 403, { error: 'You do not have permission to kick users from rooms.' });
+			const boardPerm = c.var.DBUser.boardPermissions.find((p) => p.boardId === boardId);
+			const isOwner = c.var.DBUser.ownedBoards.some((b) => b.boardId === boardId);
 
-			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
-			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+			const canManage = c.var.privileged || isOwner || boardPerm?.permissionType === 'Write';
+			if (!canManage) return json(c, 403, { error: 'You do not have access to this board.' });
 
 			const userId = c.req.query('userId');
 			if (!userId) return json(c, 400, { error: 'User ID is required.' });
 
+			const TargetUser = await db(manager, 'user', 'findUnique', { where: { userId }, include: { boardPermissions: true, ownedBoards: true } });
+			if (!TargetUser) return json(c, 404, { error: 'User not found.' });
+
+			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
+			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+
 			const RoomData = manager.socket.roomData.get(boardId);
 			if (!RoomData) return json(c, 404, { error: 'Board not found or no one is currently collaborating.' });
+
+			const targetBoardPerm = TargetUser.boardPermissions.find((p) => p.boardId === boardId);
+			const targetIsDev = config.developers.includes(securityUtils.decrypt(TargetUser.email));
+
+			if (!c.var.isDev) {
+				if (targetIsDev) return json(c, 403, { error: 'You cannot kick a developer.' });
+
+				const isTargetWrite = targetBoardPerm?.permissionType === 'Write' || TargetUser.ownedBoards.some((b) => b.boardId === boardId);
+				if (c.var.privileged && isTargetWrite) return json(c, 403, { error: 'You can only kick users with read-only access.' });
+			}
 
 			const kicked = await manager.socket.kickUser(boardId, userId);
 			if (!kicked) return json(c, 404, { error: 'User not found in the room.' });
