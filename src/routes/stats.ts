@@ -102,7 +102,7 @@ export default [
 				boardName: activity.board.name,
 				totalMinutes: Math.round((activity.totalTimeSeconds || 0) / 60),
 				sessionCount: activity.sessionCount || 0,
-			}));
+			})).filter((activity) => activity.totalMinutes > 0);
 
 			return json(c, 200, {
 				data: {
