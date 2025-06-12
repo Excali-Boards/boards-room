@@ -670,7 +670,7 @@ export default [
 			if (!c.var.isDev) {
 				if (targetIsDev) return json(c, 403, { error: 'You cannot kick a developer.' });
 
-				const isTargetWrite = targetBoardPerm?.permissionType === 'Write' || TargetUser.ownedBoards.some((b) => b.boardId === boardId);
+				const isTargetWrite = TargetUser.isBoardsAdmin || targetBoardPerm?.permissionType === 'Write' || TargetUser.ownedBoards.some((b) => b.boardId === boardId);
 				if (c.var.privileged && isTargetWrite) return json(c, 403, { error: 'You can only kick users with read-only access.' });
 			}
 
