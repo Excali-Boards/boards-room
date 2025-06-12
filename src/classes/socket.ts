@@ -214,7 +214,9 @@ export default class SocketServer {
 		this.roomData.set(DBBoard.boardId, roomData);
 
 		socket.emit('init', { elements: roomData.elements });
-		this.io?.to(DBBoard.boardId).emit('setCollaborators', Array.from(roomData.collaborators.values()));
+
+		socket.broadcast.to(DBBoard.boardId).emit('setCollaborators', Array.from(roomData.collaborators.values()));
+		setTimeout(() => socket.emit('setCollaborators', Array.from(roomData.collaborators.values())), 1000);
 
 		socket.on('disconnect', async () => {
 			clearTimeout(this.connectionTimes.get(socket.id));
@@ -352,7 +354,7 @@ export default class SocketServer {
 		const roomData = this.roomData.get(boardId);
 		if (!roomData) return;
 
-		const collaboratorEntry = Array.from(roomData.collaborators.values()).filter((collaborator) => collaborator.id === userId);
+		const collaboratorEntry = Array.from(roomData.collaborators.values()).filter((collaborator) => collaborator.id === userId || collaborator.socketId === userId);
 		if (!collaboratorEntry.length) return;
 
 		const socketId = collaboratorEntry.find((collaborator) => collaborator.socketId)?.socketId as SocketId;
