@@ -47,10 +47,12 @@ export default class SocketServer {
 	}
 
 	private async initSavingBoards(): Promise<void> {
-		setInterval(async () => {
-			const savePromises = Array.from(this.roomData.keys()).map((boardId) => this.saveSpecificBoard(boardId));
-			await Promise.allSettled(savePromises);
-		}, 1000 * 15); // Save every 15 seconds
+		setInterval(async () => this.saveAllBoards(), 1000 * 15); // 15 seconds
+	}
+
+	public async saveAllBoards(): Promise<void> {
+		const savePromises = Array.from(this.roomData.keys()).map((boardId) => this.saveSpecificBoard(boardId));
+		await Promise.allSettled(savePromises);
 	}
 
 	private async saveSpecificBoard(boardId: string): Promise<void> {
