@@ -48,6 +48,7 @@ export default [
 
 			const userToUpdate = await db(manager, 'user', 'findUnique', { where: { userId }, include: { boardPermissions: true } });
 			if (!userToUpdate) return json(c, 404, { error: 'User not found.' });
+			else if (userToUpdate.isBoardsAdmin && !c.var.isDev) return json(c, 403, { error: 'Cannot modify permissions of admin users.' });
 
 			if (typeof isBoardsAdmin === 'boolean') {
 				const isDev = config.developers.includes(securityUtils.decrypt(c.var.DBUser.email));
@@ -59,8 +60,6 @@ export default [
 					select: { userId: true },
 				});
 			}
-
-			if (userToUpdate.isBoardsAdmin && !c.var.DBUser.isBoardsAdmin) return json(c, 403, { error: 'Cannot modify permissions of admin users.' });
 
 			if (permissions) {
 				const existingPerms = userToUpdate.boardPermissions;
