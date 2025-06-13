@@ -193,10 +193,13 @@ export default class Files {
 		const files = await db(this.manager, 'file', 'findMany', { where: boardId ? { boardId } : {} });
 		if (!files) return { status: 500, error: 'Failed to get files.' };
 
-		const s3Files = await this.getAllFiles(boardId);
+		const s3Files = await this.getAllFiles(boardId ? `${boardId}/` : undefined);
 		if (!s3Files) return { status: 500, error: 'Failed to get files.' };
 
-		const toDelete = s3Files.Contents?.filter((file) => !files.some((f) => f.fileId === file.Key?.split('/')[1])) || [];
+		const toDelete = s3Files.Contents
+			?.filter((file) => !files.some((f) => file.Key && f.fileId === file.Key.split('/')[1]))
+			.filter((file) => file.Key && !file.Key.endsWith('.bin')) || [];
+
 		if (!toDelete.length) return { status: 200, data: 'No files to delete.' };
 
 		await Promise.all(toDelete.map((file) => file.Key ? this.deleteFile(file.Key) : null));
