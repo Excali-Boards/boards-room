@@ -10,6 +10,8 @@ export default class Utils {
 		if (this.timer) return;
 
 		this.timer = setInterval(async () => {
+			this.manager.files.triggerCacheInvalidation();
+
 			const DBBoards = await db(this.manager, 'board', 'findMany', { where: { scheduledForDeletion: { lte: new Date() } }, include: { files: true } });
 			if (!DBBoards?.length) return;
 
