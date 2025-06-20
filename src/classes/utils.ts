@@ -10,7 +10,7 @@ export default class Utils {
 		if (this.timer) return;
 
 		this.timer = setInterval(async () => {
-			const DBBoards = await db(this.manager, 'board', 'findMany', { where: { scheduledForDeletion: { gte: new Date() } }, include: { files: true } });
+			const DBBoards = await db(this.manager, 'board', 'findMany', { where: { scheduledForDeletion: { lte: new Date() } }, include: { files: true } });
 			if (!DBBoards?.length) return;
 
 			const boardIds = DBBoards.map((board) => board.boardId);
