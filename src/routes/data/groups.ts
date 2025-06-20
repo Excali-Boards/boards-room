@@ -74,14 +74,14 @@ export default [
 			const existingGroup = await db(manager, 'group', 'findFirst', { where: { name: { mode: 'insensitive', equals: isValid.data.name } } });
 			if (existingGroup) return json(c, 400, { error: 'Group with that name already exists.' });
 
-			const totalGroups = await db(manager, 'group', 'count', {}) || 0;
+			const totalGroups = await db(manager, 'group', 'findMany', { select: { index: true } }) || [];
 			const newGroup = await db(manager, 'group', 'create', {
 				select: { groupId: true },
 				data: {
 					name: isValid.data.name,
 					groupId: securityUtils.randomString(12),
 					categories: { create: [] },
-					index: totalGroups,
+					index: Math.max(...(totalGroups?.map((g) => g.index) || [0])) + 1,
 				},
 			});
 
@@ -230,12 +230,12 @@ export default [
 			const existingCategory = await db(manager, 'category', 'findFirst', { where: { name: { mode: 'insensitive', equals: isValid.data.name }, groupId } });
 			if (existingCategory) return json(c, 400, { error: 'Category with that name already exists in this group.' });
 
-			const totalCategories = await db(manager, 'category', 'count', { where: { groupId } }) || 0;
+			const totalCategories = await db(manager, 'category', 'findMany', { where: { groupId }, select: { index: true } }) || [];
 			const newCategory = await db(manager, 'category', 'create', {
 				data: {
 					name: isValid.data.name,
 					categoryId: securityUtils.randomString(12),
-					index: totalCategories,
+					index: Math.max(...(totalCategories?.map((c) => c.index) || [0])) + 1,
 					groupId,
 				},
 			});
@@ -399,13 +399,13 @@ export default [
 			const existingBoard = await db(manager, 'board', 'findFirst', { where: { name: { mode: 'insensitive', equals: isValid.data.name }, categoryId, category: { groupId } } });
 			if (existingBoard) return json(c, 400, { error: 'Board with that name already exists in this category.' });
 
-			const totalBoards = await db(manager, 'board', 'count', { where: { categoryId, category: { groupId } } }) || 0;
+			const totalBoards = await db(manager, 'board', 'findMany', { where: { categoryId, category: { groupId } }, select: { index: true } });
 			const newBoard = await db(manager, 'board', 'create', {
 				data: {
 					name: isValid.data.name,
 					boardId: securityUtils.randomString(12),
 					categoryId,
-					index: totalBoards,
+					index: Math.max(...(totalBoards?.map((b) => b.index) || [0])) + 1,
 					ownerId: c.var.DBUser.userId,
 				},
 			});
