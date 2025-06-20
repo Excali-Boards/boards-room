@@ -362,10 +362,10 @@ export default [
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 			else if (!c.var.privileged) return json(c, 403, { error: 'You do not have permission to create boards.' });
 
-			const existingBoard = await db(manager, 'board', 'findFirst', { where: { name: { mode: 'insensitive', equals: isValid.data.name }, categoryId, groupId } });
+			const existingBoard = await db(manager, 'board', 'findFirst', { where: { name: { mode: 'insensitive', equals: isValid.data.name }, categoryId, category: { groupId } } });
 			if (existingBoard) return json(c, 400, { error: 'Board with that name already exists in this category.' });
 
-			const totalBoards = await db(manager, 'board', 'count', { where: { categoryId, groupId } }) || 0;
+			const totalBoards = await db(manager, 'board', 'count', { where: { categoryId, category: { groupId } } }) || 0;
 			const newBoard = await db(manager, 'board', 'create', {
 				data: {
 					name: isValid.data.name,
@@ -398,7 +398,7 @@ export default [
 			const DBCategory = await db(manager, 'category', 'findUnique', { where: { categoryId, groupId } });
 			if (!DBCategory) return json(c, 404, { error: 'Category not found.' });
 
-			const DBBoards = await db(manager, 'board', 'findMany', { where: { categoryId, groupId, boardId: { in: isValid.data } }, orderBy: { index: 'asc' } }) || [];
+			const DBBoards = await db(manager, 'board', 'findMany', { where: { categoryId, category: { groupId }, boardId: { in: isValid.data } }, orderBy: { index: 'asc' } }) || [];
 			if (DBBoards.length !== isValid.data.length) return json(c, 400, { error: 'Some boards do not belong to this category.' });
 
 			for (let i = 0; i < DBBoards.length; i++) {
@@ -589,7 +589,9 @@ export default [
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
 
-			const deletedBoard = await db(manager, 'board', 'update', { where: { boardId, categoryId, category: { groupId } }, data: { scheduledForDeletion: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) } });
+			const scheduledForDeletion = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
+
+			const deletedBoard = await db(manager, 'board', 'update', { where: { boardId, categoryId, category: { groupId } }, data: { scheduledForDeletion } });
 			if (!deletedBoard) return json(c, 500, { error: 'Failed to delete board.' });
 
 			return json(c, 200, { data: 'Board scheduled for deletion.' });

@@ -101,7 +101,6 @@ export const compressionUtils = {
 
 		const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
 		return compressionUtils.decompress<T>(decrypted);
-
 	},
 };
 
