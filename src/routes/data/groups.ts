@@ -104,9 +104,9 @@ export default [
 			const DBGroups = await db(manager, 'group', 'findMany', { where: { groupId: { in: isValid.data } }, orderBy: { index: 'asc' } }) || [];
 			if (DBGroups.length !== isValid.data.length) return json(c, 400, { error: 'Some groups do not exist.' });
 
-			for (let i = 0; i < DBGroups.length; i++) {
+			for (let i = 0; i < isValid.data.length; i++) {
 				await db(manager, 'group', 'update', {
-					where: { groupId: DBGroups[i]?.groupId },
+					where: { groupId: isValid.data[i] },
 					data: { index: i },
 					select: { groupId: true },
 				});
@@ -263,9 +263,9 @@ export default [
 			const DBCategories = await db(manager, 'category', 'findMany', { where: { groupId, categoryId: { in: isValid.data } }, orderBy: { index: 'asc' } }) || [];
 			if (DBCategories.length !== isValid.data.length) return json(c, 400, { error: 'Some categories do not belong to this group.' });
 
-			for (let i = 0; i < DBCategories.length; i++) {
+			for (let i = 0; i < isValid.data.length; i++) {
 				await db(manager, 'category', 'update', {
-					where: { categoryId: DBCategories[i]?.categoryId },
+					where: { categoryId: isValid.data[i] },
 					data: { index: i },
 					select: { categoryId: true },
 				});
@@ -440,9 +440,9 @@ export default [
 			const DBBoards = await db(manager, 'board', 'findMany', { where: { categoryId, category: { groupId }, boardId: { in: isValid.data } }, orderBy: { index: 'asc' } }) || [];
 			if (DBBoards.length !== isValid.data.length) return json(c, 400, { error: 'Some boards do not belong to this category.' });
 
-			for (let i = 0; i < DBBoards.length; i++) {
+			for (let i = 0; i < isValid.data.length; i++) {
 				await db(manager, 'board', 'update', {
-					where: { boardId: DBBoards[i]?.boardId },
+					where: { boardId: isValid.data[i] },
 					data: { index: i },
 					select: { boardId: true },
 				});
