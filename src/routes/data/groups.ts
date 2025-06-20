@@ -34,6 +34,17 @@ export default [
 				},
 			}) || [];
 
+			const allBoardSizes = await Promise.all(
+				DBGroups.flatMap((g) =>
+					g.categories.flatMap((cat) =>
+						cat.boards.map(async (board) => ({
+							boardId: board.boardId,
+							size: await manager.files.getBoardSize(board.boardId),
+						})),
+					),
+				),
+			);
+
 			return json(c, 200, {
 				data: {
 					isAdmin: c.var.privileged,
@@ -43,6 +54,7 @@ export default [
 						index: g.index,
 						categories: g.categories.length,
 						isDefault: c.var.DBUser.mainGroupId === g.groupId,
+						sizeBytes: g.categories.reduce((acc, cat) => acc + cat.boards.reduce((boardAcc, board) => boardAcc + (allBoardSizes.find((b) => b.boardId === board.boardId)?.size || 0), 0), 0) || 0,
 					})),
 				},
 			});
@@ -127,6 +139,15 @@ export default [
 
 			if (!allowedCategories.length && !c.var.privileged) return json(c, 403, { error: 'You do not have access to any categories in this group.' });
 
+			const allBoardSizes = await Promise.all(
+				allowedCategories.flatMap((cat) =>
+					cat.boards.map(async (board) => ({
+						boardId: board.boardId,
+						size: await manager.files.getBoardSize(board.boardId),
+					})),
+				),
+			);
+
 			return json(c, 200, {
 				data: {
 					isAdmin: c.var.privileged,
@@ -140,6 +161,7 @@ export default [
 						name: cat.name,
 						index: cat.index,
 						boards: cat.boards.length,
+						sizeBytes: cat.boards.reduce((acc, board) => acc + (allBoardSizes.find((b) => b.boardId === board.boardId)?.size || 0), 0) || 0,
 					})),
 				},
 			});
@@ -275,10 +297,12 @@ export default [
 
 			if (!allowedBoards.length && !c.var.privileged) return json(c, 403, { error: 'You do not have access to any boards in this category.' });
 
-			const allBoardSizes = await Promise.all(allowedBoards.map((board) => ({
-				boardId: board.boardId,
-				size: manager.files.getBoardSize(board.boardId),
-			})));
+			const allBoardSizes = await Promise.all(
+				allowedBoards.map(async (board) => ({
+					boardId: board.boardId,
+					size: await manager.files.getBoardSize(board.boardId),
+				})),
+			);
 
 			return json(c, 200, {
 				data: {
@@ -472,10 +496,12 @@ export default [
 				},
 			}) || [];
 
-			const allBoardSizes = await Promise.all(DBBoards.map((board) => ({
-				boardId: board.boardId,
-				size: manager.files.getBoardSize(board.boardId),
-			})));
+			const allBoardSizes = await Promise.all(
+				DBBoards.map(async (board) => ({
+					boardId: board.boardId,
+					size: await manager.files.getBoardSize(board.boardId),
+				})),
+			);
 
 			return json(c, 200, {
 				data: {

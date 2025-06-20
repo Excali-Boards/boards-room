@@ -80,10 +80,37 @@ export default [
 				});
 			}
 
+			const allBoardSizes = await Promise.all(
+				filteredGroups.flatMap((group) =>
+					group.categories.flatMap((category) =>
+						category.boards.map(async (board) => ({
+							boardId: board.id,
+							size: await manager.files.getBoardSize(board.id),
+						})),
+					),
+				),
+			);
+
 			return json(c, 200, {
 				data: {
 					isAdmin: c.var.privileged,
-					list: filteredGroups,
+					list: filteredGroups.map((group) => ({
+						id: group.id,
+						name: group.name,
+						index: group.index,
+						categories: group.categories.map((category) => ({
+							id: category.id,
+							name: category.name,
+							index: category.index,
+							boards: category.boards.map((board) => ({
+								id: board.id,
+								name: board.name,
+								index: board.index,
+								scheduledForDeletion: board.scheduledForDeletion,
+								sizeBytes: allBoardSizes.find((b) => b.boardId === board.id)?.size || 0,
+							})),
+						})),
+					})),
 				},
 			});
 		},
