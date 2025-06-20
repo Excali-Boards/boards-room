@@ -8,7 +8,7 @@ import { db } from '../modules/prisma';
 
 export default class Files {
 	private boardSizeCache = new Map<string, { size: number; expiresAt: number }>();
-	private readonly boardSizeCacheTTL = 5 * 60 * 1000;
+	private readonly boardSizeCacheTTL = 5 * 60 * 1000; // 5 minutes
 
 	private s3 = new S3Client({
 		endpoint: config.s3.endpoint,
