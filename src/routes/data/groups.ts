@@ -275,6 +275,11 @@ export default [
 
 			if (!allowedBoards.length && !c.var.privileged) return json(c, 403, { error: 'You do not have access to any boards in this category.' });
 
+			const allBoardSizes = await Promise.all(allowedBoards.map((board) => ({
+				boardId: board.boardId,
+				size: manager.files.getBoardSize(board.boardId),
+			})));
+
 			return json(c, 200, {
 				data: {
 					isAdmin: c.var.privileged,
@@ -292,8 +297,12 @@ export default [
 						id: board.boardId,
 						name: board.name,
 						index: board.index,
-						boardId: board.boardId,
 						scheduledForDeletion: board.scheduledForDeletion,
+						dataUrl: `${config.s3.endpoint}/${config.s3.bucket}/boards/${board.boardId}.bin`,
+						sizeBytes: allBoardSizes.find((b) => b.boardId === board.boardId)?.size || 0,
+						accessLevel: c.var.privileged || c.var.DBUser.ownedBoards.some((b) => b.boardId === board.boardId)
+							? 'Write'
+							: c.var.DBUser.boardPermissions.find((p) => p.boardId === board.boardId)?.permissionType || 'Read',
 					})),
 				},
 			});
@@ -487,7 +496,7 @@ export default [
 							name: board.name,
 							index: board.index,
 							dataUrl: `${config.s3.endpoint}/${config.s3.bucket}/boards/${board.boardId}.bin`,
-							boardSizeBytes: allBoardSizes.find((b) => b.boardId === board.boardId)?.size || 0,
+							sizeBytes: allBoardSizes.find((b) => b.boardId === board.boardId)?.size || 0,
 							accessLevel: c.var.privileged || c.var.DBUser.ownedBoards.some((b) => b.boardId === board.boardId)
 								? 'Write'
 								: c.var.DBUser.boardPermissions.find((p) => p.boardId === board.boardId)?.permissionType || 'Read',
@@ -545,7 +554,7 @@ export default [
 						name: DBBoard.name,
 						index: DBBoard.index,
 						dataUrl: `${config.s3.endpoint}/${config.s3.bucket}/boards/${DBBoard.boardId}.bin`,
-						boardSizeBytes: allBoardSizes || 0,
+						sizeBytes: allBoardSizes || 0,
 						accessLevel: c.var.privileged || isOwner ? 'Write' : boardPerm?.permissionType || 'Read',
 						scheduledForDeletion: DBBoard.scheduledForDeletion,
 						files: DBBoard.files.map((file) => ({
