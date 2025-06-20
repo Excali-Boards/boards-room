@@ -293,6 +293,7 @@ export default [
 						name: board.name,
 						index: board.index,
 						boardId: board.boardId,
+						scheduledForDeletion: board.scheduledForDeletion,
 					})),
 				},
 			});
@@ -427,6 +428,7 @@ export default [
 					boardId: true,
 					name: true,
 					index: true,
+					scheduledForDeletion: true,
 					files: {
 						select: {
 							fileId: true,
@@ -483,6 +485,7 @@ export default [
 							accessLevel: c.var.privileged || c.var.DBUser.ownedBoards.some((b) => b.boardId === board.boardId)
 								? 'Write'
 								: c.var.DBUser.boardPermissions.find((p) => p.boardId === board.boardId)?.permissionType || 'Read',
+							scheduledForDeletion: board.scheduledForDeletion,
 							files: board.files.map((file) => ({
 								fileId: file.fileId,
 								mimeType: file.mimeType,
@@ -535,6 +538,7 @@ export default [
 						index: DBBoard.index,
 						dataUrl: `${config.s3.endpoint}/${config.s3.bucket}/boards/${DBBoard.boardId}.bin`,
 						accessLevel: boardPerm?.permissionType || (isOwner ? 'Write' : 'Read'),
+						scheduledForDeletion: DBBoard.scheduledForDeletion,
 						files: DBBoard.files.map((file) => ({
 							fileId: file.fileId,
 							mimeType: file.mimeType,

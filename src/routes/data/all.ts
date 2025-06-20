@@ -69,6 +69,7 @@ export default [
 									id: board.boardId,
 									name: board.name,
 									index: board.index,
+									scheduledForDeletion: board.scheduledForDeletion,
 								})),
 						})),
 				}));
