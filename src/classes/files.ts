@@ -80,7 +80,7 @@ export default class Files {
 			return this.s3.send(new HeadObjectCommand({
 				Bucket: config.s3.bucket,
 				Key: key,
-			})).catch(() => null);
+			}));
 		} catch {
 			return null;
 		}
@@ -95,7 +95,7 @@ export default class Files {
 			return this.s3.send(new GetObjectCommand({
 				Bucket: config.s3.bucket,
 				Key: key,
-			})).catch(() => null);
+			}));
 		} catch {
 			return null;
 		}
@@ -103,13 +103,11 @@ export default class Files {
 
 	public async getAllFiles(withPrefix?: string, continuationToken?: string): Promise<ListObjectsV2Output | null> {
 		try {
-			const res = await this.s3.send(new ListObjectsV2Command({
+			return this.s3.send(new ListObjectsV2Command({
 				Bucket: config.s3.bucket,
 				Prefix: withPrefix,
 				ContinuationToken: continuationToken,
-			})).catch(() => null);
-
-			return res;
+			}));
 		} catch {
 			return null;
 		}
@@ -122,7 +120,7 @@ export default class Files {
 				ContentType: contentType,
 				Body: file,
 				Key: key,
-			})).catch(() => null);
+			}));
 		} catch {
 			return null;
 		}
@@ -133,7 +131,7 @@ export default class Files {
 			return this.s3.send(new DeleteObjectCommand({
 				Bucket: config.s3.bucket,
 				Key: key,
-			})).catch(() => null);
+			}));
 		} catch {
 			return null;
 		}
@@ -186,7 +184,7 @@ export default class Files {
 			await this.s3.send(new DeleteObjectCommand({
 				Bucket: config.s3.bucket,
 				Key: prefix,
-			})).catch(() => null);
+			}));
 
 			return true;
 		} catch {
