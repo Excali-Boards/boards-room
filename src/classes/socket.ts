@@ -77,7 +77,7 @@ export default class SocketServer {
 		const compressed = compressionUtils.compressAndEncrypt(roomData.elements);
 
 		const uploaded = await this.manager.files.uploadFile(`boards/${boardId}.bin`, compressed, 'application/octet-stream');
-		if (!uploaded) throw new Error(`Failed to upload board data for ${boardId}`);
+		if (!uploaded) throw new Error(`Failed to upload board data for ${boardId}.`);
 
 		await db(this.manager, 'board', 'update', {
 			where: { boardId },

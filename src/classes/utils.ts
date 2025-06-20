@@ -16,7 +16,11 @@ export default class Utils {
 			if (!DBBoards?.length) return;
 
 			const boardIds = DBBoards.map((board) => board.boardId);
-			for (const board of DBBoards) this.manager.files.deleteFiles(board.files.map((file) => file.fileId), board.boardId);
+			for (const board of DBBoards) {
+				this.manager.files.deleteFile(`boards/${board.boardId}.bin`);
+				this.manager.files.deleteFiles(board.files.map((file) => file.fileId), board.boardId);
+			}
+
 			await db(this.manager, 'board', 'deleteMany', { where: { boardId: { in: boardIds } } });
 		}, 1000 * 60 * 30); // 30 minutes
 	}

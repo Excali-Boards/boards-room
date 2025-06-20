@@ -1,4 +1,4 @@
-import { parseZodError, securityUtils } from '../../modules/utils';
+import { compressionUtils, parseZodError, securityUtils } from '../../modules/utils';
 import config, { nameObject } from '../../modules/config';
 import { json, makeRoute } from '../../classes/routes';
 import { db } from '../../modules/prisma';
@@ -411,6 +411,11 @@ export default [
 			});
 
 			if (!newBoard) return json(c, 500, { error: 'Failed to create board.' });
+
+			const compressed = compressionUtils.compressAndEncrypt([]);
+			const uploaded = await manager.files.uploadFile(`boards/${newBoard.boardId}.bin`, compressed, 'application/octet-stream');
+			if (!uploaded) return json(c, 500, { error: 'Failed to upload board file.' });
+
 			return json(c, 200, { data: 'Board created successfully.' });
 		},
 	}),

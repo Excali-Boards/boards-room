@@ -76,14 +76,7 @@ export default class Files {
 	}
 
 	public async headFile(key: string): Promise<HeadObjectCommandOutput | null> {
-		try {
-			return this.s3.send(new HeadObjectCommand({
-				Bucket: config.s3.bucket,
-				Key: key,
-			}));
-		} catch {
-			return null;
-		}
+		return this.s3.send(new HeadObjectCommand({ Bucket: config.s3.bucket, Key: key })).catch(() => null);
 	}
 
 	public async hasFile(key: string): Promise<boolean> {
@@ -91,50 +84,19 @@ export default class Files {
 	}
 
 	public async getFile(key: string) {
-		try {
-			return this.s3.send(new GetObjectCommand({
-				Bucket: config.s3.bucket,
-				Key: key,
-			}));
-		} catch {
-			return null;
-		}
+		return this.s3.send(new GetObjectCommand({ Bucket: config.s3.bucket, Key: key })).catch(() => null);
 	}
 
 	public async getAllFiles(withPrefix?: string, continuationToken?: string): Promise<ListObjectsV2Output | null> {
-		try {
-			return this.s3.send(new ListObjectsV2Command({
-				Bucket: config.s3.bucket,
-				Prefix: withPrefix,
-				ContinuationToken: continuationToken,
-			}));
-		} catch {
-			return null;
-		}
+		return this.s3.send(new ListObjectsV2Command({ Bucket: config.s3.bucket, Prefix: withPrefix, ContinuationToken: continuationToken })).catch(() => null);
 	}
 
 	public async uploadFile(key: string, file: PutObjectCommand['input']['Body'], contentType: string): Promise<PutObjectCommandOutput | null> {
-		try {
-			return this.s3.send(new PutObjectCommand({
-				Bucket: config.s3.bucket,
-				ContentType: contentType,
-				Body: file,
-				Key: key,
-			}));
-		} catch {
-			return null;
-		}
+		return this.s3.send(new PutObjectCommand({ Bucket: config.s3.bucket, Key: key, Body: file, ContentType: contentType })).catch(() => null);
 	}
 
 	public async deleteFile(key: string): Promise<DeleteObjectCommandOutput | null> {
-		try {
-			return this.s3.send(new DeleteObjectCommand({
-				Bucket: config.s3.bucket,
-				Key: key,
-			}));
-		} catch {
-			return null;
-		}
+		return this.s3.send(new DeleteObjectCommand({ Bucket: config.s3.bucket, Key: key })).catch(() => null);
 	}
 
 	public async getDirectorySize(prefix: string): Promise<number> {
