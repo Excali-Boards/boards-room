@@ -141,6 +141,12 @@ export type SnapshotData = {
 	elements: ExcalidrawElement[];
 };
 
+export type StatsData = {
+	success: number;
+	failed: number;
+	total: number;
+};
+
 export type ActionType = 'add' | 'remove';
 export type FileActionData<T extends ActionType> = {
 	action: T;
@@ -153,7 +159,7 @@ export type ServerToClientEvents = {
 	isSaved: () => unknown;
 	kick: () => unknown;
 
-	filesUpdated: () => unknown;
+	filesUpdated: (stats?: StatsData) => unknown;
 	preloadFiles: (files: string[]) => unknown;
 
 	followedBy: (data: string[]) => unknown;

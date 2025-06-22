@@ -322,8 +322,8 @@ export default class SocketServer {
 					updated.files.push(...missing.map((f) => f.id));
 					this.roomData.set(DBBoard.boardId, updated);
 
-					await this.manager.files.createFiles(missing, DBBoard.boardId);
-					socket.broadcast.to(DBBoard.boardId).emit('filesUpdated');
+					const files = await this.manager.files.createFiles(missing, DBBoard.boardId);
+					socket.broadcast.to(DBBoard.boardId).emit('filesUpdated', { ...files, total: missing.length });
 
 					updated.elements = updated.elements.map((el) => {
 						if (isInitializedImageElement(el)) {

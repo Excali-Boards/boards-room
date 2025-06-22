@@ -80,7 +80,8 @@ export default class Files {
 	}
 
 	public async hasFile(key: string): Promise<boolean> {
-		return !!this.headFile(key);
+		const head = await this.headFile(key);
+		return head !== null && head.ContentLength !== undefined && head.ContentLength > 0;
 	}
 
 	public async getFile(key: string) {
@@ -92,11 +93,17 @@ export default class Files {
 	}
 
 	public async uploadFile(key: string, file: PutObjectCommand['input']['Body'], contentType: string): Promise<PutObjectCommandOutput | null> {
-		return this.s3.send(new PutObjectCommand({ Bucket: config.s3.bucket, Key: key, Body: file, ContentType: contentType })).catch(() => null);
+		return this.s3.send(new PutObjectCommand({ Bucket: config.s3.bucket, Key: key, Body: file, ContentType: contentType })).catch((err) => {
+			console.error(`Failed to upload file ${key}:`, err);
+			return null;
+		});
 	}
 
 	public async deleteFile(key: string): Promise<DeleteObjectCommandOutput | null> {
-		return this.s3.send(new DeleteObjectCommand({ Bucket: config.s3.bucket, Key: key })).catch(() => null);
+		return this.s3.send(new DeleteObjectCommand({ Bucket: config.s3.bucket, Key: key })).catch((err) => {
+			console.error(`Failed to delete file ${key}:`, err);
+			return null;
+		});
 	}
 
 	public async getDirectorySize(prefix: string): Promise<number> {
@@ -159,20 +166,6 @@ export default class Files {
 		if (!files.length) return { success: 0, failed: 0 };
 		this.boardSizeCache.delete(boardId);
 
-		await this.manager.prisma.client.$transaction(files.map((file) => this.manager.prisma.client.file.upsert({
-			where: { fileId: file.id },
-			update: {
-				mimeType: file.mimeType,
-				createdAt: new Date(file.created),
-			},
-			create: {
-				boardId,
-				fileId: file.id,
-				mimeType: file.mimeType,
-				createdAt: new Date(file.created),
-			},
-		})));
-
 		const existenceChecks = await Promise.all(files.map((file) => this.hasFile(`${boardId}/${file.id}`)));
 		const filesToUpload = files.filter((_, idx) => !existenceChecks[idx]);
 
@@ -191,6 +184,21 @@ export default class Files {
 		);
 
 		const failedUploads = results.filter((result) => result === null);
+		const nonFailedUploads = filesToUpload.filter((_, idx) => results[idx] !== null);
+
+		await this.manager.prisma.client.$transaction(nonFailedUploads.map((file) => this.manager.prisma.client.file.upsert({
+			where: { fileId: file.id },
+			update: {
+				mimeType: file.mimeType,
+				createdAt: new Date(file.created),
+			},
+			create: {
+				boardId,
+				fileId: file.id,
+				mimeType: file.mimeType,
+				createdAt: new Date(file.created),
+			},
+		})));
 
 		return {
 			success: results.length - failedUploads.length,

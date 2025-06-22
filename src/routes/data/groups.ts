@@ -81,7 +81,7 @@ export default [
 					name: isValid.data.name,
 					groupId: securityUtils.randomString(12),
 					categories: { create: [] },
-					index: Math.max(...(totalGroups?.map((g) => g.index) || [0])) + 1,
+					index: (totalGroups && totalGroups.length > 0 ? Math.max(...totalGroups.map((g) => g.index)) + 1 : 0),
 				},
 			});
 
@@ -235,7 +235,7 @@ export default [
 				data: {
 					name: isValid.data.name,
 					categoryId: securityUtils.randomString(12),
-					index: Math.max(...(totalCategories?.map((c) => c.index) || [0])) + 1,
+					index: (totalCategories && totalCategories.length > 0 ? Math.max(...totalCategories.map((c) => c.index)) + 1 : 0),
 					groupId,
 				},
 			});
@@ -405,7 +405,7 @@ export default [
 					name: isValid.data.name,
 					boardId: securityUtils.randomString(12),
 					categoryId,
-					index: Math.max(...(totalBoards?.map((b) => b.index) || [0])) + 1,
+					index: (totalBoards && totalBoards.length > 0 ? Math.max(...totalBoards.map((b) => b.index)) + 1 : 0),
 					ownerId: c.var.DBUser.userId,
 				},
 			});
