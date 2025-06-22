@@ -57,13 +57,25 @@ pnpm run rebuild
 
 Backend runs at `http://localhost:3004`.
 
+
 ---
 
-## 📌 Notes
+## 🤝 Contributing
 
-- All routes are protected with an API token or user session.
-- Data is stored persistently using PostgreSQL and S3.
-- Developer routes available for monitoring, admin, and debugging.
+Contributions, fixes, and ideas are welcome! If you'd like to get involved:
+
+* Fork the repository and make your changes.
+* Run `pnpm lint && pnpm typecheck` before pushing.
+* Open a pull request with a clear description.
+
+Please follow the existing coding style and commit clean, atomic changes.
+
+---
+
+## 💬 Support
+
+Questions, issues, or just want to chat? Join our community on **Discord**:
+👉 [https://discord.gg/4rphpersCa](https://discord.gg/4rphpersCa)
 
 ---
 

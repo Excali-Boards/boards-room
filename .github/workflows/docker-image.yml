@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'prisma/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose.yml'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 jobs:
