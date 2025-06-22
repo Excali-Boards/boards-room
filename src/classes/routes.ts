@@ -1,5 +1,6 @@
 import { HonoEnv, RouteType, StatusWebCode, StatusWebResponse } from '../types';
 import { securityUtils, toLowercase } from '../modules/utils';
+import { getConnInfo } from '@hono/node-server/conninfo';
 import { Context, MiddlewareHandler } from 'hono';
 import LoggerModule from '../modules/logger';
 import { readdirSync, statSync } from 'fs';
@@ -11,6 +12,7 @@ import { cors } from 'hono/cors';
 import path from 'path';
 
 export default class Routes {
+	private ipHits: Map<string, { count: number; lastRequest: number; }> = new Map();
 	public routes: Map<`${string}|${string}`, { enabled: boolean; }> = new Map();
 	public routePath = path.join(__dirname, '..', 'routes');
 
@@ -62,6 +64,7 @@ export default class Routes {
 
 		const handlers: MiddlewareHandler[] = [
 			this.globalHandler(),
+			this.rateLimit(),
 		];
 
 		const key = route.path + '|' + route.method as `${string}|${string}`;
@@ -160,6 +163,34 @@ export default class Routes {
 			return next();
 		};
 	}
+
+	private rateLimit(options = { windowMs: 60000, max: 50 }): MiddlewareHandler<HonoEnv> { // Max 50 requests per minute.
+		return async (c, next) => {
+			const info = getConnInfo(c);
+			const ip = info.remote.address || 'unknown';
+			const now = Date.now();
+
+			const record = this.ipHits.get(ip) || { count: 0, lastRequest: now };
+
+			if (now - record.lastRequest > options.windowMs) {
+				record.count = 1;
+				record.lastRequest = now;
+			} else {
+				record.count++;
+			}
+
+			this.ipHits.set(ip, record);
+
+			if (record.count > options.max) {
+				return json(c, 429, {
+					error: 'Too many requests. Please try again later.',
+				});
+			}
+
+			return next();
+		};
+	}
+
 }
 
 // Utility functions.
