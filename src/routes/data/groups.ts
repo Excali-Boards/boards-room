@@ -719,6 +719,9 @@ export default [
 			const RoomData = manager.socket.roomData.get(boardId);
 			if (!RoomData) return json(c, 404, { error: 'Board not found or no one is currently collaborating.' });
 
+			const targetIsSelf = c.var.DBUser.userId === userId;
+			if (targetIsSelf) return json(c, 400, { error: 'You cannot kick yourself from the room.' });
+
 			const targetBoardPerm = TargetUser.boardPermissions.find((p) => p.boardId === boardId);
 			const targetIsDev = config.developers.includes(securityUtils.decrypt(TargetUser.email));
 
