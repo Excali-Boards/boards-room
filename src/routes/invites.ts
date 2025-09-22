@@ -238,6 +238,7 @@ export default [
 			}
 
 			await applyPermissionGrants(manager, permissionResult, invite.createdBy, userId);
+			await db(manager, 'invite', 'update', { where: { dbId: invite.dbId }, data: { currentUses: { increment: 1 } } }).catch(() => null);
 
 			const allGrantedPermissions = [
 				...permissionResult.newPermissions,
