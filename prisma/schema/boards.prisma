@@ -1,0 +1,56 @@
+model Group {
+    dbId    String @id @default(uuid())
+    groupId String @unique
+
+    name  String
+    index Int
+
+    categories  Category[]
+    permissions GroupPermission[]
+}
+
+model Category {
+    dbId       String @id @default(uuid())
+    categoryId String @unique
+
+    name  String
+    index Int
+
+    groupId String
+    group   Group  @relation(fields: [groupId], references: [groupId], onDelete: Cascade)
+
+    boards      Board[]
+    permissions CategoryPermission[]
+}
+
+model Board {
+    dbId    String @id @default(uuid())
+    boardId String @unique
+
+    name  String
+    index Int
+
+    version   Int      @default(0)
+    updatedAt DateTime @default(now())
+
+    scheduledForDeletion DateTime?
+    totalSizeBytes       Int       @default(0)
+
+    categoryId String
+    category   Category @relation(fields: [categoryId], references: [categoryId], onDelete: Cascade)
+
+    files           File[]
+    boardPermission BoardPermission[]
+}
+
+model File {
+    dbId   String @id @default(uuid())
+    fileId String @unique
+
+    mimeType  String
+    createdAt DateTime
+    sizeBytes Int
+
+    boardId String
+    board   Board  @relation(fields: [boardId], references: [boardId], onDelete: Cascade)
+}
