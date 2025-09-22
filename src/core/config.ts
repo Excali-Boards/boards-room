@@ -1,4 +1,4 @@
-// import { parseZodError } from '../modules/functions';
+import { parseZodError } from '../modules/functions';
 import env from 'dotenv';
 import { z } from 'zod';
 
@@ -55,8 +55,7 @@ const ConfigSchema = z.object({
 });
 
 const validatedConfig = ConfigSchema.safeParse(config);
-// if (!validatedConfig.success) throw new Error(JSON.stringify(parseZodError(validatedConfig.error), null, 5));
-if (!validatedConfig.success) throw new Error('Invalid environment variables.');
+if (!validatedConfig.success) throw new Error(JSON.stringify(parseZodError(validatedConfig.error), null, 5));
 
 export default validatedConfig.data;
 
