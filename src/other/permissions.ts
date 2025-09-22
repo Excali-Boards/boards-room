@@ -33,7 +33,7 @@ export function isDeveloper(email: string): boolean {
 	return config.developers.includes(securityUtils.decrypt(email));
 }
 
-export async function getUserHighestRole<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>): Promise<ResourceReturnEnum<A> | null> {
+export function getUserHighestRole<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>): ResourceReturnEnum<A> | null {
 	if (isDeveloper(DBUser.email)) return GlobalRole.Developer as ResourceReturnEnum<A>;
 
 	const roles: UserRole[] = [];
@@ -82,8 +82,8 @@ export async function getUserHighestRole<A extends GlobalResourceType>(DBUser: D
 	return roles.reduce((highest, current) => PermissionHierarchy[current] > PermissionHierarchy[highest] ? current : highest) as ResourceReturnEnum<A>;
 }
 
-export async function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): Promise<AccessLevel | null> {
-	const role = userHighestRole || await getUserHighestRole(DBUser, resource);
+export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): AccessLevel | null {
+	const role = userHighestRole || getUserHighestRole(DBUser, resource);
 	if (!role) return null;
 
 	switch (resource.type) {
@@ -111,8 +111,8 @@ export async function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUse
 	return null;
 }
 
-export async function canView<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): Promise<boolean> {
-	const role = userHighestRole || await getUserHighestRole(DBUser, resource);
+export function canView<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
+	const role = userHighestRole || getUserHighestRole(DBUser, resource);
 	if (!role) return false;
 
 	let targetPermission: UserRole | null = null;
@@ -126,8 +126,8 @@ export async function canView<A extends GlobalResourceType>(DBUser: DBUserPartia
 	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];
 }
 
-export async function canManage<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): Promise<boolean> {
-	const role = userHighestRole || await getUserHighestRole(DBUser, resource);
+export function canManage<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
+	const role = userHighestRole || getUserHighestRole(DBUser, resource);
 	if (!role) return false;
 
 	let targetPermission: UserRole | null = null;
@@ -141,8 +141,8 @@ export async function canManage<A extends GlobalResourceType>(DBUser: DBUserPart
 	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];
 }
 
-export async function canManagePermissions<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): Promise<boolean> {
-	const role = userHighestRole || await getUserHighestRole(DBUser, resource);
+export function canManagePermissions<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
+	const role = userHighestRole || getUserHighestRole(DBUser, resource);
 	if (!role) return false;
 
 	let targetPermission: UserRole | null = null;

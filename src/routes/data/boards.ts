@@ -21,7 +21,7 @@ export default [
 			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const canCreateBoard = await canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+			const canCreateBoard = canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 			if (!canCreateBoard) return json(c, 403, { error: 'You do not have permission to create boards in this category.' });
 
 			const totalBoards = await db(manager, 'board', 'findMany', { where: { categoryId, category: { groupId } }, select: { index: true } });
@@ -56,7 +56,7 @@ export default [
 			const isValid = z.array(z.string()).safeParse(await c.req.json().catch(() => []));
 			if (!isValid.success || !isValid.data.length) return json(c, 400, { error: 'Invalid board order.' });
 
-			const canReorderBoards = await canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+			const canReorderBoards = canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 			if (!canReorderBoards) return json(c, 403, { error: 'You do not have permission to reorder boards in this category.' });
 
 			const DBCategory = await db(manager, 'category', 'findUnique', { where: { categoryId, groupId } });
@@ -90,11 +90,11 @@ export default [
 			const groupId = c.req.param('groupId');
 			const categoryId = c.req.param('categoryId');
 
-			const accessLevel = await getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
+			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
 			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this board.' });
 
-			const accessLevelCategory = await getAccessLevel(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
-			const accessLevelGroup = await getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId } });
+			const accessLevelCategory = getAccessLevel(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+			const accessLevelGroup = getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId } });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', {
 				where: { boardId, categoryId, category: { groupId } },
@@ -179,7 +179,7 @@ export default [
 			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const canUpdateBoard = await canManage(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
+			const canUpdateBoard = canManage(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
 			if (!canUpdateBoard) return json(c, 403, { error: 'You do not have permission to update this board.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
@@ -202,7 +202,7 @@ export default [
 			const groupId = c.req.param('groupId');
 			const categoryId = c.req.param('categoryId');
 
-			const canDeleteBoard = await canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+			const canDeleteBoard = canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 			if (!canDeleteBoard) return json(c, 403, { error: 'You do not have permission to delete this board.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
@@ -229,7 +229,7 @@ export default [
 			const groupId = c.req.param('groupId');
 			const categoryId = c.req.param('categoryId');
 
-			const accessLevel = await getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
+			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
 			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this board.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
@@ -263,7 +263,7 @@ export default [
 			const groupId = c.req.param('groupId');
 			const categoryId = c.req.param('categoryId');
 
-			const accessLevel = await getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
+			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
 			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this board.' });
 
 			const userId = c.req.query('userId');
@@ -287,7 +287,7 @@ export default [
 			if (!isCurrentUserDev) {
 				if (targetIsDev) return json(c, 403, { error: 'You cannot kick a developer.' });
 
-				const targetAccessLevel = await getAccessLevel(TargetUser, { type: 'board', data: { boardId, categoryId, groupId } });
+				const targetAccessLevel = getAccessLevel(TargetUser, { type: 'board', data: { boardId, categoryId, groupId } });
 				if (!targetAccessLevel) return json(c, 400, { error: 'The target user does not have access to this board.' });
 				else if (targetAccessLevel !== 'read') return json(c, 400, { error: 'The target user has more than read access to this board.' });
 			}
@@ -309,7 +309,7 @@ export default [
 			const groupId = c.req.param('groupId');
 			const categoryId = c.req.param('categoryId');
 
-			const canCancelDeletion = await canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+			const canCancelDeletion = canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 			if (!canCancelDeletion) return json(c, 403, { error: 'You do not have permission to cancel deletion of this board.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });

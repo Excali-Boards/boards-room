@@ -55,13 +55,6 @@ export default [
 				},
 			}) || [];
 
-			const groupAccessLevels = await Promise.all(
-				DBGroups.map(async (group) => ({
-					groupId: group.groupId,
-					accessLevel: await getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } }) || 'read',
-				})),
-			);
-
 			return json(c, 200, {
 				data: DBGroups.sort((a, b) => a.index - b.index).map((g) => ({
 					id: g.groupId,
@@ -69,7 +62,7 @@ export default [
 					index: g.index,
 					categories: g.categories.length,
 					isDefault: c.var.DBUser.mainGroupId === g.groupId,
-					accessLevel: groupAccessLevels.find((gal) => gal.groupId === g.groupId)?.accessLevel || 'read',
+					accessLevel: getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId: g.groupId } }) || 'read',
 					sizeBytes: g.categories.reduce((acc, cat) => acc + cat.boards.reduce((boardAcc, board) => boardAcc + (board.totalSizeBytes || 0), 0), 0) || 0,
 				})),
 			});
@@ -113,7 +106,7 @@ export default [
 			const isValid = z.array(z.string()).safeParse(await c.req.json().catch(() => []));
 			if (!isValid.success || !isValid.data.length) return json(c, 400, { error: 'Invalid group order.' });
 
-			const canReorderGroups = await canManage(c.var.DBUser, { type: 'global', data: null });
+			const canReorderGroups = canManage(c.var.DBUser, { type: 'global', data: null });
 			if (!canReorderGroups) return json(c, 403, { error: 'You do not have permission to reorder groups.' });
 
 			const DBGroups = await db(manager, 'group', 'findMany', { where: { groupId: { in: isValid.data } } }) || [];
@@ -141,7 +134,7 @@ export default [
 		handler: async (c) => {
 			const groupId = c.req.param('groupId');
 
-			const accessLevel = await getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId } });
+			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId } });
 			if (!accessLevel) return json(c, 403, { error: 'You do not have permission to view this group.' });
 
 			const DBGroup = await db(manager, 'group', 'findUnique', {
@@ -187,13 +180,6 @@ export default [
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
 			else if (!DBGroup.categories.length && !c.var.isDev) return json(c, 403, { error: 'You do not have access to any categories in this group.' });
 
-			const categoryAccessLevels = await Promise.all(
-				DBGroup.categories.map(async (category) => ({
-					categoryId: category.categoryId,
-					accessLevel: await getAccessLevel(c.var.DBUser, { type: 'category', data: { categoryId: category.categoryId, groupId } }) || 'read',
-				})),
-			);
-
 			return json(c, 200, {
 				data: {
 					group: {
@@ -207,7 +193,7 @@ export default [
 						name: cat.name,
 						index: cat.index,
 						boards: cat.boards.length,
-						accessLevel: categoryAccessLevels.find((cal) => cal.categoryId === cat.categoryId)?.accessLevel || 'read',
+						accessLevel: getAccessLevel(c.var.DBUser, { type: 'category', data: { categoryId: cat.categoryId, groupId } }) || 'read',
 						totalSizeBytes: cat.boards.reduce((acc, board) => acc + board.totalSizeBytes, 0) || 0,
 					})),
 				},

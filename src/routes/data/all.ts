@@ -1,3 +1,4 @@
+import { getAccessLevel } from '../../other/permissions';
 import { json, makeRoute } from '../../services/routes';
 import { db } from '../../core/prisma';
 import manager from '../../index';
@@ -60,14 +61,17 @@ export default [
 					id: group.groupId,
 					name: group.name,
 					index: group.index,
+					accessLevel: getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } }),
 					categories: group.categories.map((category) => ({
 						id: category.categoryId,
 						name: category.name,
 						index: category.index,
+						accessLevel: getAccessLevel(c.var.DBUser, { type: 'category', data: { groupId: group.groupId, categoryId: category.categoryId } }),
 						boards: category.boards.map((board) => ({
 							id: board.boardId,
 							name: board.name,
 							index: board.index,
+							accessLevel: getAccessLevel(c.var.DBUser, { type: 'board', data: { groupId: group.groupId, categoryId: category.categoryId, boardId: board.boardId } }),
 							totalSizeBytes: board.totalSizeBytes,
 							scheduledForDeletion: board.scheduledForDeletion,
 						})).sort((a, b) => a.index - b.index),

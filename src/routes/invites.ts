@@ -91,7 +91,7 @@ export default [
 
 			if (groupIds && groupIds.length > 0) {
 				for (const groupId of groupIds) {
-					canManage = await canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId } });
+					canManage = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId } });
 					if (!canManage) {
 						failedResource = { type: 'group', id: groupId };
 						break;
@@ -107,7 +107,7 @@ export default [
 					const groupId = DBCategories.find((c) => c.categoryId === categoryId)?.groupId;
 					if (!groupId) return json(c, 400, { error: `Category (ID: ${categoryId}) does not belong to a valid group.` });
 
-					canManage = await canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+					canManage = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 					if (!canManage) {
 						failedResource = { type: 'category', id: categoryId };
 						break;
@@ -126,7 +126,7 @@ export default [
 					const categoryId = DBBoards.find((b) => b.boardId === boardId)?.category?.categoryId;
 					if (!categoryId) return json(c, 400, { error: `Board (ID: ${boardId}) does not belong to a valid category.` });
 
-					canManage = await canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId, groupId, categoryId } });
+					canManage = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId, groupId, categoryId } });
 					if (!canManage) {
 						failedResource = { type: 'board', id: boardId };
 						break;
@@ -322,7 +322,7 @@ export default [
 				case 'board': {
 					if (!resourceBoardId || !resourceCategoryId || !resourceGroupId) return json(c, 400, { error: 'Missing resource identifiers. Must provide groupId, categoryId, and boardId for board resources.' });
 
-					const canViewResource = await canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: resourceBoardId, categoryId: resourceCategoryId, groupId: resourceGroupId } });
+					const canViewResource = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: resourceBoardId, categoryId: resourceCategoryId, groupId: resourceGroupId } });
 					if (!canViewResource) return json(c, 403, { error: 'You do not have permission to view this resource.' });
 
 					invites = await db(manager, 'invite', 'findMany', {
@@ -340,7 +340,7 @@ export default [
 				case 'category': {
 					if (!resourceCategoryId || !resourceGroupId) return json(c, 400, { error: 'Missing resource identifiers. Must provide groupId and categoryId for category resources.' });
 
-					const canViewResource = await canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: resourceCategoryId, groupId: resourceGroupId } });
+					const canViewResource = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: resourceCategoryId, groupId: resourceGroupId } });
 					if (!canViewResource) return json(c, 403, { error: 'You do not have permission to view this resource.' });
 
 					invites = await db(manager, 'invite', 'findMany', {
@@ -357,7 +357,7 @@ export default [
 				case 'group': {
 					if (!resourceGroupId) return json(c, 400, { error: 'Missing resource identifier. Must provide groupId for group resources.' });
 
-					const canViewResource = await canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: resourceGroupId } });
+					const canViewResource = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: resourceGroupId } });
 					if (!canViewResource) return json(c, 403, { error: 'You do not have permission to view this resource.' });
 
 					invites = await db(manager, 'invite', 'findMany', {

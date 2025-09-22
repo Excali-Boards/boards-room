@@ -39,7 +39,7 @@ export default [
 					const categoryId = board.category.categoryId;
 					const groupId = board.category.group.groupId;
 
-					const canView = await canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: board.boardId, categoryId, groupId } });
+					const canView = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: board.boardId, categoryId, groupId } });
 					if (!canView) return json(c, 403, { error: 'No permission' });
 
 					const [boardPerms, categoryPerms, groupPerms] = await Promise.all([
@@ -77,7 +77,7 @@ export default [
 
 					const groupId = category.group.groupId;
 
-					const canView = await canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: category.categoryId, groupId } });
+					const canView = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: category.categoryId, groupId } });
 					if (!canView) return json(c, 403, { error: 'No permission' });
 
 					const [categoryPerms, groupPerms] = await Promise.all([
@@ -105,7 +105,7 @@ export default [
 					const group = await db(manager, 'group', 'findUnique', { where: { groupId: resourceId }, select: { groupId: true } });
 					if (!group) return json(c, 404, { error: 'Group not found' });
 
-					const canView = await canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } });
+					const canView = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } });
 					if (!canView) return json(c, 403, { error: 'No permission' });
 
 					const groupPerms = await db(manager, 'groupPermission', 'findMany', {
@@ -159,7 +159,7 @@ export default [
 
 				if (groupIds && groupIds.length > 0) {
 					for (const groupId of groupIds) {
-						canManage = await canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId } });
+						canManage = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId } });
 						if (!canManage) return json(c, 403, { error: `You do not have permission to create invites for this group (ID: ${groupId}).` });
 					}
 				}
@@ -172,7 +172,7 @@ export default [
 						const groupId = DBCategories.find((c) => c.categoryId === categoryId)?.groupId;
 						if (!groupId) return json(c, 400, { error: `Category (ID: ${categoryId}) does not belong to a valid group.` });
 
-						canManage = await canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+						canManage = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 						if (!canManage) return json(c, 403, { error: `You do not have permission to create invites for this category (ID: ${categoryId}).` });
 					}
 				}
@@ -188,7 +188,7 @@ export default [
 						const categoryId = DBBoards.find((b) => b.boardId === boardId)?.category?.categoryId;
 						if (!categoryId) return json(c, 400, { error: `Board (ID: ${boardId}) does not belong to a valid category.` });
 
-						canManage = await canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId, groupId, categoryId } });
+						canManage = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId, groupId, categoryId } });
 						if (!canManage) return json(c, 403, { error: `You do not have permission to create invites for this board (ID: ${boardId}).` });
 					}
 				}
@@ -217,7 +217,7 @@ export default [
 					const group = await db(manager, 'group', 'findUnique', { where: { groupId: resourceId } });
 					if (!group) return json(c, 404, { error: 'Group not found.' });
 
-					const canManage = await canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: resourceId } });
+					const canManage = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: resourceId } });
 					if (!canManage) return json(c, 403, { error: 'You do not have permission to revoke access to this resource.' });
 
 					break;
@@ -226,7 +226,7 @@ export default [
 					const category = await db(manager, 'category', 'findUnique', { where: { categoryId: resourceId }, select: { groupId: true } });
 					if (!category) return json(c, 404, { error: 'Category not found.' });
 
-					const canManage = await canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: resourceId, groupId: category.groupId } });
+					const canManage = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: resourceId, groupId: category.groupId } });
 					if (!canManage) return json(c, 403, { error: 'You do not have permission to revoke access to this resource.' });
 
 					break;
@@ -235,7 +235,7 @@ export default [
 					const board = await db(manager, 'board', 'findUnique', { where: { boardId: resourceId }, select: { category: { select: { groupId: true, categoryId: true } } } });
 					if (!board) return json(c, 404, { error: 'Board not found.' });
 
-					const canManage = await canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: resourceId, categoryId: board.category.categoryId, groupId: board.category.groupId } });
+					const canManage = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: resourceId, categoryId: board.category.categoryId, groupId: board.category.groupId } });
 					if (!canManage) return json(c, 403, { error: 'You do not have permission to revoke access to this resource.' });
 
 					break;
