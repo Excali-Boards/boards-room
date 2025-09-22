@@ -20,13 +20,6 @@ const config = {
 		secretKey: process.env.S3_SECRET_KEY!,
 		bucket: process.env.S3_BUCKET!,
 	},
-
-	valkey: {
-		host: process.env.VALKEY_HOST || 'localhost',
-		port: process.env.VALKEY_PORT ? parseInt(process.env.VALKEY_PORT, 10) : 6379,
-		password: process.env.VALKEY_PASSWORD!,
-		db: process.env.VALKEY_DB ? parseInt(process.env.VALKEY_DB, 10) : 11,
-	},
 } satisfies z.infer<typeof ConfigSchema>;
 
 const ConfigSchema = z.object({
@@ -44,13 +37,6 @@ const ConfigSchema = z.object({
 		accessKey: z.string(),
 		secretKey: z.string(),
 		bucket: z.string(),
-	}),
-
-	valkey: z.object({
-		host: z.string(),
-		password: z.string(),
-		port: z.number().int(),
-		db: z.number().int().min(0),
 	}),
 });
 

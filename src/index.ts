@@ -1,5 +1,3 @@
-// import { PrismaWithCache, ValKeyCache } from 'prisma-cache-all';
-// import { performanceConstants } from './core/constants';
 import PrometheusMetrics from './modules/metrics';
 import { PrismaClient } from '@prisma/client';
 import SocketServer from './services/socket';
@@ -7,9 +5,7 @@ import LoggerModule from './modules/logger';
 import Routes from './services/routes';
 import Files from './services/files';
 import Utils from './modules/utils';
-import config from './core/config';
 import { HonoEnv } from './types';
-import ValKey from 'iovalkey';
 import { Hono } from 'hono';
 
 console.clear();
@@ -18,8 +14,6 @@ console.clear();
 
 export class BoardsManager {
 	public hono = new Hono<HonoEnv>();
-	public valkey = new ValKey(config.valkey);
-
 	public prisma = new PrismaClient();
 
 	public prometheus = new PrometheusMetrics(this);
@@ -35,8 +29,6 @@ export class BoardsManager {
 	public async init() {
 		await this.initPrisma();
 
-		this.prismaMetrics();
-
 		await this.routes.init();
 		await this.socket.init();
 		await this.utils.init();
@@ -45,16 +37,6 @@ export class BoardsManager {
 	private async initPrisma(): Promise<void> {
 		await this.prisma.$connect();
 		LoggerModule('Prisma', 'Prisma is successfully connected.', 'cyan');
-	}
-
-	private prismaMetrics(): void {
-		// this.prisma.setMetricsCallbacks({
-		// 	onCacheHit: (model, action) => this.prometheus.recordDbCacheOperation(model, action, true),
-		// 	onCacheMiss: (model, action) => this.prometheus.recordDbCacheOperation(model, action, false),
-		// 	onDbRequest: (model, action, durationMs) => this.prometheus.recordDbQuery(model, action, durationMs),
-		// 	onDbError: (model, action, error) => this.prometheus.recordDbError(model, action, error.name),
-		// 	onCacheSizeUpdate: (size) => this.prometheus.updateDbCacheSize(size),
-		// });
 	}
 }
 

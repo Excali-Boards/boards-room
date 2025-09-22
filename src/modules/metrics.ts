@@ -60,23 +60,6 @@ export class MetricsBase {
 		labelNames: ['operation', 'table', 'error_type'],
 	});
 
-	protected dbCacheHits = new Counter({
-		name: 'boards_db_cache_hits_total',
-		help: 'Total number of database cache hits',
-		labelNames: ['operation', 'table'],
-	});
-
-	protected dbCacheMisses = new Counter({
-		name: 'boards_db_cache_misses_total',
-		help: 'Total number of database cache misses',
-		labelNames: ['operation', 'table'],
-	});
-
-	protected dbCacheSize = new Gauge({
-		name: 'boards_db_cache_size',
-		help: 'Current size of the database cache',
-	});
-
 	// -------------------- Essential System Metrics --------------------
 	protected memoryUsage = new Gauge({
 		name: 'boards_memory_usage_bytes',
@@ -170,15 +153,6 @@ export default class PrometheusMetrics extends MetricsBase {
 
 	public recordDbError(table: string, operation: string, errorType: string) {
 		this.dbErrors.inc({ operation, table, error_type: errorType });
-	}
-
-	public recordDbCacheOperation(table: string, operation: string, hit: boolean) {
-		if (hit) this.dbCacheHits.inc({ operation, table });
-		else this.dbCacheMisses.inc({ operation, table });
-	}
-
-	public updateDbCacheSize(size: number) {
-		this.dbCacheSize.set(size);
 	}
 
 	public recordFileOperation(operation: string, status: 'success' | 'error'): void {
