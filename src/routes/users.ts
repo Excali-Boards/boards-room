@@ -47,11 +47,9 @@ export default [
 				}, false);
 			}
 
-			if (isValid.data.mainGroupId) {
-				if (isValid.data.mainGroupId) {
-					const DBGroup = await db(manager, 'group', 'findUnique', { where: { groupId: isValid.data.mainGroupId } });
-					if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
-				}
+			if (isValid.data.mainGroupId !== undefined) {
+				const DBGroup = isValid.data.mainGroupId ? await db(manager, 'group', 'findUnique', { where: { groupId: isValid.data.mainGroupId } }) : null;
+				if (isValid.data.mainGroupId && !DBGroup) return json(c, 404, { error: 'Group not found.' });
 
 				await db(manager, 'user', 'update', {
 					where: { userId: c.var.DBUser.userId },
