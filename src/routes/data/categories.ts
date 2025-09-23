@@ -195,6 +195,17 @@ export default [
 			const deletedCategory = await db(manager, 'category', 'delete', { where: { categoryId, groupId } });
 			if (!deletedCategory) return json(c, 500, { error: 'Failed to delete category.' });
 
+			const DBInvites = await db(manager, 'invite', 'findMany', { where: { categoryIds: { has: categoryId } } }) || [];
+			await Promise.all(DBInvites.map((inv) => {
+				const newCategoryIds = inv.categoryIds.filter((id) => id !== categoryId);
+
+				if (!newCategoryIds.length && !inv.groupIds.length && !inv.boardIds.length) {
+					return db(manager, 'invite', 'delete', { where: { dbId: inv.dbId } });
+				}
+
+				return db(manager, 'invite', 'update', { where: { dbId: inv.dbId }, data: { categoryIds: newCategoryIds } });
+			}));
+
 			return json(c, 200, { data: 'Category deleted successfully.' });
 		},
 	}),

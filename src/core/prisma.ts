@@ -6,7 +6,7 @@ export type IncludesSwitch<
 	N extends TSPrisma.AllModelNamesLowercase,
 	M extends TSPrisma.AllPrismaMethodsLowercase,
 	T extends TSPrisma.AllArgs[N][M],
-	I extends boolean,
+	I extends boolean = false,
 > = I extends true ? TSPrisma.IncludesResult<N, M, T> : TSPrisma.Result<N, M, T>;
 
 export async function db<
@@ -24,7 +24,7 @@ export async function db<
 	const startTime = Date.now();
 
 	try {
-		const newArgs = 'select' in args || !includeAll ? args : TSPrisma.Functions.computeArgs(modelName, operation, args);
+		const newArgs = 'select' in args || 'include' in args || !includeAll ? args : TSPrisma.Functions.computeArgs(modelName, operation, args);
 		const res = await (instance.prisma[modelName][operation] as TSPrisma.Callable)(newArgs) as never;
 
 		if (typeof res === 'object' && res && 'stack' in res) {

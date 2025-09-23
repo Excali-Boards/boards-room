@@ -243,6 +243,17 @@ export default [
 			const deletedGroup = await db(manager, 'group', 'delete', { where: { groupId } });
 			if (!deletedGroup) return json(c, 500, { error: 'Failed to delete group.' });
 
+			const DBInvites = await db(manager, 'invite', 'findMany', { where: { groupIds: { has: groupId } } }) || [];
+			await Promise.all(DBInvites.map((inv) => {
+				const newGroupIds = inv.groupIds.filter((id) => id !== groupId);
+
+				if (!newGroupIds.length && !inv.categoryIds.length && !inv.boardIds.length) {
+					return db(manager, 'invite', 'delete', { where: { dbId: inv.dbId } });
+				}
+
+				return db(manager, 'invite', 'update', { where: { dbId: inv.dbId }, data: { groupIds: newGroupIds } });
+			}));
+
 			return json(c, 200, { data: 'Group deleted successfully.' });
 		},
 	}),
