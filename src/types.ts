@@ -114,11 +114,15 @@ export type IpApiResponse = {
 };
 
 export type GrantedEntry = {
-	type: ResourceType;
 	role: UserRole;
+	grantType: 'explicit' | 'implicit';
+
+	type: ResourceType;
 	resourceId: string;
+
 	basedOnType: ResourceType;
 	basedOnResourceId: string;
+	basedOnResourceName: string;
 };
 
 // Routes.

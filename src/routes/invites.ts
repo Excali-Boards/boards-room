@@ -284,6 +284,33 @@ export default [
 	}),
 	makeRoute({
 		path: '/invites/:code',
+		method: 'PATCH',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			const code = c.req.param('code');
+
+			const invite = await db(manager, 'invite', 'findUnique', { where: { code } });
+			if (!invite) return json(c, 404, { error: 'Invite not found.' });
+			else if (invite.createdBy !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to renew this invite.' });
+
+			const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+			const updated = await db(manager, 'invite', 'update', { where: { dbId: invite.dbId }, data: { expiresAt: newExpiry } });
+			if (!updated) return json(c, 500, { error: 'Failed to renew invite. Please try again.' });
+
+			return json(c, 200, {
+				data: {
+					code: updated.code,
+					expiresAt: updated.expiresAt,
+					maxUses: updated.maxUses,
+					currentUses: updated.currentUses,
+				},
+			});
+		},
+	}),
+	makeRoute({
+		path: '/invites/:code',
 		method: 'DELETE',
 		enabled: true,
 		auth: true,

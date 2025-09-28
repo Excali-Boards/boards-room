@@ -179,19 +179,25 @@ export function getBoardResourceId(resource: ResourceTypeGeneric<'board'>): Reso
 	return { boardId: resource.data.boardId, categoryId: resource.data.categoryId, groupId: resource.data.groupId };
 }
 
-export function addPermission(map: Map<string, GrantedEntry[]>, userId: string, entry: GrantedEntry) {
+export function addPermission(map: Map<string, GrantedEntry[]>, userId: string, entry: Omit<GrantedEntry, 'grantType'>) {
 	if (!map.has(userId)) map.set(userId, []);
-	const perms = map.get(userId)!;
+	const perms = map.get(userId) || [];
 
 	const existing = perms.find((p) => p.type === entry.type && p.resourceId === entry.resourceId);
 
 	if (!existing) {
-		perms.push(entry);
+		perms.push({
+			...entry,
+			grantType: entry.basedOnType === entry.type ? 'explicit' : 'implicit',
+		});
+
 		return;
 	}
 
 	const curr = PermissionHierarchy[existing.role] ?? 0;
 	const next = PermissionHierarchy[entry.role] ?? 0;
+
+	existing.grantType = existing.grantType === 'explicit' ? 'explicit' : entry.basedOnType === entry.type ? 'explicit' : 'implicit';
 
 	if (next > curr) {
 		existing.role = entry.role;

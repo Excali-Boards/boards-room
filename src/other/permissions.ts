@@ -84,7 +84,20 @@ export function getUserHighestRole<A extends GlobalResourceType>(DBUser: DBUserP
 
 export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): AccessLevel | null {
 	const role = userHighestRole || getUserHighestRole(DBUser, resource);
-	if (!role) return null;
+	if (!role) {
+		if (resource.type === 'group') {
+			const hasAnyCategoryAccess = DBUser.categoryPermissions.length > 0;
+			const hasAnyBoardAccess = DBUser.boardPermissions.length > 0;
+			if (hasAnyCategoryAccess || hasAnyBoardAccess) return 'read';
+		}
+
+		if (resource.type === 'category') {
+			const hasAnyBoardAccess = DBUser.boardPermissions.length > 0;
+			if (hasAnyBoardAccess) return 'read';
+		}
+
+		return null;
+	}
 
 	switch (resource.type) {
 		case 'board': {

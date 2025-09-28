@@ -29,15 +29,19 @@ export default [
 					const board = await db(manager, 'board', 'findUnique', {
 						where: { boardId: resourceId },
 						select: {
+							name: true,
 							boardId: true,
-							category: { select: { categoryId: true, group: { select: { groupId: true } } } },
+							category: { select: { categoryId: true, name: true, group: { select: { groupId: true, name: true } } } },
 						},
 					});
 
 					if (!board) return json(c, 404, { error: 'Board not found.' });
 
 					const categoryId = board.category.categoryId;
+					const categoryName = board.category.name;
+
 					const groupId = board.category.group.groupId;
+					const groupName = board.category.group.name;
 
 					const canView = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: board.boardId, categoryId, groupId } });
 					if (!canView) return json(c, 403, { error: 'No permission' });
@@ -52,6 +56,7 @@ export default [
 						addPermission(usersWithAccess, perm.userId, {
 							type: 'board', role: perm.role, resourceId: board.boardId,
 							basedOnType: 'board', basedOnResourceId: board.boardId,
+							basedOnResourceName: board.name,
 						});
 					}
 
@@ -59,6 +64,7 @@ export default [
 						addPermission(usersWithAccess, perm.userId, {
 							type: 'board', role: perm.role, resourceId: board.boardId,
 							basedOnType: 'category', basedOnResourceId: categoryId,
+							basedOnResourceName: categoryName,
 						});
 					}
 
@@ -66,16 +72,18 @@ export default [
 						addPermission(usersWithAccess, perm.userId, {
 							type: 'board', role: perm.role, resourceId: board.boardId,
 							basedOnType: 'group', basedOnResourceId: groupId,
+							basedOnResourceName: groupName,
 						});
 					}
 
 					break;
 				}
 				case 'category': {
-					const category = await db(manager, 'category', 'findUnique', { where: { categoryId: resourceId }, select: { categoryId: true, group: { select: { groupId: true } } } });
+					const category = await db(manager, 'category', 'findUnique', { where: { categoryId: resourceId }, select: { categoryId: true, name: true, group: { select: { groupId: true, name: true } } } });
 					if (!category) return json(c, 404, { error: 'Category not found.' });
 
 					const groupId = category.group.groupId;
+					const groupName = category.group.name;
 
 					const canView = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: category.categoryId, groupId } });
 					if (!canView) return json(c, 403, { error: 'No permission' });
@@ -89,6 +97,7 @@ export default [
 						addPermission(usersWithAccess, perm.userId, {
 							type: 'category', role: perm.role, resourceId: category.categoryId,
 							basedOnType: 'category', basedOnResourceId: category.categoryId,
+							basedOnResourceName: category.name,
 						});
 					}
 
@@ -96,13 +105,14 @@ export default [
 						addPermission(usersWithAccess, perm.userId, {
 							type: 'category', role: perm.role, resourceId: category.categoryId,
 							basedOnType: 'group', basedOnResourceId: groupId,
+							basedOnResourceName: groupName,
 						});
 					}
 
 					break;
 				}
 				case 'group': {
-					const group = await db(manager, 'group', 'findUnique', { where: { groupId: resourceId }, select: { groupId: true } });
+					const group = await db(manager, 'group', 'findUnique', { where: { groupId: resourceId }, select: { groupId: true, name: true } });
 					if (!group) return json(c, 404, { error: 'Group not found' });
 
 					const canView = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } });
@@ -116,6 +126,7 @@ export default [
 						addPermission(usersWithAccess, perm.userId, {
 							type: 'group', role: perm.role, resourceId: group.groupId,
 							basedOnType: 'group', basedOnResourceId: group.groupId,
+							basedOnResourceName: group.name,
 						});
 					}
 
@@ -124,12 +135,10 @@ export default [
 			}
 
 			const userIds = Array.from(usersWithAccess.keys());
-			const users = userIds.length
-				? (await db(manager, 'user', 'findMany', {
-					where: { userId: { in: userIds } },
-					select: { userId: true, email: true, displayName: true, avatarUrl: true },
-				})) || []
-				: [];
+			const users = userIds.length ? (await db(manager, 'user', 'findMany', {
+				where: { userId: { in: userIds } },
+				select: { userId: true, email: true, displayName: true, avatarUrl: true },
+			})) || [] : [];
 
 			const result = users.map((user) => ({
 				...user,
