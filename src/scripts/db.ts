@@ -22,6 +22,7 @@ const clientMain = new Client({ connectionString: defaultSchemaUrl });
 		if (result.rows.length !== 0) {
 			if (forceDrop) {
 				const clientDb = new Client({ connectionString: connectionURL });
+				await clientDb.connect();
 
 				console.log(`--force provided. Dropping and recreating the "public" schema in database "${dbName}"...`);
 
@@ -33,6 +34,8 @@ const clientMain = new Client({ connectionString: defaultSchemaUrl });
 
 				await clientDb.query('GRANT ALL ON SCHEMA public TO public');
 				console.log('Re-granted default privileges on the "public" schema.');
+
+				await clientDb.end();
 			} else {
 				console.log('Database already exists.');
 			}

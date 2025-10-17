@@ -1,9 +1,9 @@
-import { parseZodError } from '../modules/functions';
-import { json, makeRoute } from '../services/routes';
-import { allowedPlatforms } from '../core/config';
+import { parseZodError } from '../modules/functions.js';
+import { json, makeRoute } from '../services/routes.js';
+import { allowedPlatforms } from '../core/config.js';
 import { Platforms } from '@prisma/client';
-import { db } from '../core/prisma';
-import manager from '../index';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 import { z } from 'zod';
 
 export default [
@@ -69,7 +69,12 @@ export default [
 		handler: async (c) => {
 			await db(manager, 'user', 'delete', { where: { userId: c.var.DBUser.userId } });
 
-			for (const room of manager.socket.roomData.values()) {
+			const allRooms = [
+				...manager.socket.excalidrawSocket.roomData.values(),
+				...manager.socket.tldrawSocket.roomData.values(),
+			];
+
+			for (const room of allRooms) {
 				for (const [socketId, collaborator] of room.collaborators) {
 					if (collaborator.id === c.var.DBUser.userId) {
 						room.collaborators.delete(socketId);

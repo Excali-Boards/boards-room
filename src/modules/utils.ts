@@ -1,6 +1,6 @@
-import { IpApiResponse } from '../types';
-import { BoardsManager } from '../index';
-import { db } from '../core/prisma';
+import { IpApiResponse } from '../types.js';
+import { BoardsManager } from '../index.js';
+import { db } from '../core/prisma.js';
 import axios from 'axios';
 import net from 'net';
 

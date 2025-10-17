@@ -2,7 +2,7 @@
 	"compilerOptions": {
 		/* Basic Options */
 		"incremental": true,		
-		"module": "CommonJS",
+		"module": "ES2022",
 		"target": "ES2022",
 		"outDir": "./dist",
 
@@ -23,8 +23,9 @@
 		"noFallthroughCasesInSwitch": true,
 
 		/* Module Resolution Options */
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
 		"baseUrl": ".",
 
 		"skipLibCheck": true,

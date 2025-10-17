@@ -1,11 +1,11 @@
-import { canManagePermissions, isValidRoleForResource, generateInviteCode, processPermissionGrants, applyPermissionGrants } from '../other/permissions';
-import type { InviteData, ResourceType } from '../types';
-import { parseZodError } from '../modules/functions';
-import { json, makeRoute } from '../services/routes';
-import { createInviteSchema } from './permissions';
+import { canManagePermissions, isValidRoleForResource, generateInviteCode, processPermissionGrants, applyPermissionGrants } from '../other/permissions.js';
+import type { InviteData, ResourceType } from '../types.js';
+import { parseZodError } from '../modules/functions.js';
+import { json, makeRoute } from '../services/routes.js';
+import { createInviteSchema } from './permissions.js';
 import { Invite } from '@prisma/client';
-import { db } from '../core/prisma';
-import manager from '../index';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 
 export default [
 	makeRoute({

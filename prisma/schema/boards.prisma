@@ -5,6 +5,9 @@ model Group {
     name  String
     index Int
 
+    calCode String?
+    events  Event[]
+
     categories  Category[]
     permissions GroupPermission[]
 }
@@ -30,8 +33,9 @@ model Board {
     name  String
     index Int
 
-    version   Int      @default(0)
-    updatedAt DateTime @default(now())
+    version   Int       @default(0)
+    updatedAt DateTime  @default(now())
+    type      BoardType @default(Excalidraw)
 
     scheduledForDeletion DateTime?
     totalSizeBytes       Int       @default(0)

@@ -1,11 +1,11 @@
-import { getAccessLevel } from '../../other/permissions';
-import { json, makeRoute } from '../../services/routes';
-import { db } from '../../core/prisma';
-import manager from '../../index';
+import { getAccessLevel } from '../other/permissions.js';
+import { json, makeRoute } from '../services/routes.js';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 
 export default [
 	makeRoute({
-		path: '/data/all',
+		path: '/all',
 		method: 'GET',
 		enabled: true,
 		auth: true,

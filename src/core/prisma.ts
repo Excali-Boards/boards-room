@@ -1,6 +1,6 @@
-import { recursiveDateConversion } from '../modules/functions';
+import { recursiveDateConversion } from '../modules/functions.js';
 import { TSPrisma } from '@prisma/client';
-import { BoardsManager } from '../index';
+import { BoardsManager } from '../index.js';
 
 export type IncludesSwitch<
 	N extends TSPrisma.AllModelNamesLowercase,

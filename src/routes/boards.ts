@@ -1,15 +1,15 @@
-import { compressionUtils, parseZodError, securityUtils } from '../../modules/functions';
-import { getAccessLevel, isDeveloper, canManage } from '../../other/permissions';
-import { json, makeRoute } from '../../services/routes';
-import config, { nameObject } from '../../core/config';
-import { DBUserPartial } from '../../other/vars';
-import { db } from '../../core/prisma';
-import manager from '../../index';
+import { compressionUtils, parseZodError, securityUtils } from '../modules/functions.js';
+import { getAccessLevel, isDeveloper, canManage } from '../other/permissions.js';
+import config, { boardObject, nameObject } from '../core/config.js';
+import { json, makeRoute } from '../services/routes.js';
+import { DBUserPartial } from '../other/vars.js';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 import { z } from 'zod';
 
 export default [
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards',
+		path: '/groups/:groupId/categories/:categoryId/boards',
 		method: 'POST',
 		enabled: true,
 		auth: true,
@@ -18,7 +18,7 @@ export default [
 			const categoryId = c.req.param('categoryId');
 			const groupId = c.req.param('groupId');
 
-			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));
+			const isValid = boardObject.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
 			const canCreateBoard = canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
@@ -28,15 +28,16 @@ export default [
 			const newBoard = await db(manager, 'board', 'create', {
 				data: {
 					name: isValid.data.name,
-					boardId: securityUtils.randomString(12),
+					type: isValid.data.type,
 					categoryId,
+					boardId: securityUtils.randomString(12),
 					index: (totalBoards && totalBoards.length > 0 ? Math.max(...totalBoards.map((b) => b.index)) + 1 : 0),
 				},
 			});
 
 			if (!newBoard) return json(c, 500, { error: 'Failed to create board.' });
 
-			const compressed = compressionUtils.compressAndEncrypt([]);
+			const compressed = compressionUtils.compressAndEncrypt(newBoard.type === 'Excalidraw' ? [] : {});
 			const uploaded = await manager.files.uploadBoardFile(newBoard.boardId, compressed, 'application/octet-stream');
 			if (!uploaded) return json(c, 500, { error: 'Failed to upload board file.' });
 
@@ -44,7 +45,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards',
+		path: '/groups/:groupId/categories/:categoryId/boards',
 		method: 'PUT',
 		enabled: true,
 		auth: true,
@@ -80,7 +81,7 @@ export default [
 	}),
 
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards/:boardId',
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId',
 		method: 'GET',
 		enabled: true,
 		auth: true,
@@ -101,6 +102,7 @@ export default [
 				select: {
 					boardId: true,
 					name: true,
+					type: true,
 					index: true,
 					totalSizeBytes: true,
 					scheduledForDeletion: true,
@@ -149,6 +151,7 @@ export default [
 					board: {
 						id: DBBoard.boardId,
 						name: DBBoard.name,
+						type: DBBoard.type,
 						index: DBBoard.index,
 						accessLevel: accessLevel,
 						totalSizeBytes: DBBoard.totalSizeBytes,
@@ -166,7 +169,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards/:boardId',
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId',
 		method: 'PATCH',
 		enabled: true,
 		auth: true,
@@ -192,7 +195,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards/:boardId',
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId',
 		method: 'DELETE',
 		enabled: true,
 		auth: true,
@@ -219,7 +222,7 @@ export default [
 
 	// Ohter board.
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards/:boardId/room',
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId/room',
 		method: 'GET',
 		enabled: true,
 		auth: true,
@@ -235,13 +238,16 @@ export default [
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
 
-			const RoomData = manager.socket.roomData.get(boardId);
+			const typeName = DBBoard.type === 'Excalidraw' ? 'excalidrawSocket' : 'tldrawSocket';
+
+			const RoomData = manager.socket[typeName].roomData.get(boardId);
 			if (!RoomData) return json(c, 404, { error: 'Board not found or no one is currently collaborating.' });
 
 			return json(c, 200, {
 				data: {
 					boardId: RoomData.boardId,
-					elements: RoomData.elements,
+					type: RoomData.boardType,
+					elements: 'elements' in RoomData ? RoomData.elements : RoomData.room.getCurrentDocumentClock(),
 					collaborators: [...RoomData.collaborators.values()].map((collaborator) => ({
 						id: collaborator.id,
 						socketId: collaborator.socketId,
@@ -253,7 +259,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards/:boardId/room',
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId/room',
 		method: 'POST',
 		enabled: true,
 		auth: true,
@@ -275,7 +281,9 @@ export default [
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
 
-			const RoomData = manager.socket.roomData.get(boardId);
+			const typeName = DBBoard.type === 'Excalidraw' ? 'excalidrawSocket' : 'tldrawSocket';
+
+			const RoomData = manager.socket[typeName].roomData.get(boardId);
 			if (!RoomData) return json(c, 404, { error: 'Board not found or no one is currently collaborating.' });
 
 			const targetIsSelf = c.var.DBUser.userId === userId;
@@ -292,14 +300,14 @@ export default [
 				else if (targetAccessLevel !== 'read') return json(c, 400, { error: 'The target user has more than read access to this board.' });
 			}
 
-			const kicked = await manager.socket.kickUser(boardId, userId);
+			const kicked = await manager.socket[typeName].kickUser(boardId, userId);
 			if (!kicked) return json(c, 404, { error: 'User not found in the room.' });
 
 			return json(c, 200, { data: `User ${kicked} kicked from the room.` });
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId/boards/:boardId/cancel-deletion',
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId/cancel-deletion',
 		method: 'POST',
 		enabled: true,
 		auth: true,

@@ -1,14 +1,14 @@
-import { parseZodError, securityUtils } from '../../modules/functions';
-import { getAccessLevel, canManage } from '../../other/permissions';
-import { json, makeRoute } from '../../services/routes';
-import config, { nameObject } from '../../core/config';
-import { db } from '../../core/prisma';
-import manager from '../../index';
+import { parseZodError, securityUtils } from '../modules/functions.js';
+import { getAccessLevel, canManage } from '../other/permissions.js';
+import { json, makeRoute } from '../services/routes.js';
+import config, { nameObject } from '../core/config.js';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 import { z } from 'zod';
 
 export default [
 	makeRoute({
-		path: '/data/groups/:groupId/categories',
+		path: '/groups/:groupId/categories',
 		method: 'POST',
 		enabled: true,
 		auth: true,
@@ -37,7 +37,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories',
+		path: '/groups/:groupId/categories',
 		method: 'PUT',
 		enabled: true,
 		auth: true,
@@ -72,7 +72,7 @@ export default [
 	}),
 
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId',
+		path: '/groups/:groupId/categories/:categoryId',
 		method: 'GET',
 		enabled: true,
 		auth: true,
@@ -121,7 +121,6 @@ export default [
 			});
 
 			if (!DBCategory) return json(c, 404, { error: 'Category not found.' });
-			else if (!DBCategory.boards.length && !c.var.isDev) return json(c, 403, { error: 'You do not have access to any boards in this category.' });
 
 			return json(c, 200, {
 				data: {
@@ -151,7 +150,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId',
+		path: '/groups/:groupId/categories/:categoryId',
 		method: 'PATCH',
 		enabled: true,
 		auth: true,
@@ -176,7 +175,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId/categories/:categoryId',
+		path: '/groups/:groupId/categories/:categoryId',
 		method: 'DELETE',
 		enabled: true,
 		auth: true,

@@ -1,11 +1,11 @@
-import { processPermissionGrants, applyPermissionGrants, canManagePermissions } from '../other/permissions';
+import { processPermissionGrants, applyPermissionGrants, canManagePermissions } from '../other/permissions.js';
 import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
-import { addPermission, parseZodError } from '../modules/functions';
+import { addPermission, parseZodError } from '../modules/functions.js';
 import { GetBatchResult } from '@prisma/client/runtime/library';
-import { GrantedEntry, ResourceType } from '../types';
-import { json, makeRoute } from '../services/routes';
-import { db } from '../core/prisma';
-import manager from '../index';
+import { GrantedEntry, ResourceType } from '../types.js';
+import { json, makeRoute } from '../services/routes.js';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 import { z } from 'zod';
 
 export default [
@@ -265,7 +265,7 @@ export default [
 	}),
 ];
 
-// Validation Schemas.
+// Schemas.
 export type CreateInviteRequest = z.infer<typeof createInviteSchema>;
 
 export const createInviteSchema = z.object({

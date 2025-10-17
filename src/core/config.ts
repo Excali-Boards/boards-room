@@ -1,4 +1,5 @@
-import { parseZodError } from '../modules/functions';
+import { parseZodError } from '../modules/functions.js';
+import { BoardType } from '@prisma/client';
 import env from 'dotenv';
 import { z } from 'zod';
 
@@ -50,5 +51,13 @@ export const allowedPlatforms = ['google', 'github', 'microsoft', 'discord'] as 
 
 // Zod.
 export const nameObject = z.object({
-	name: z.string().min(1, { message: 'Name must be at least 1 character long.' }).max(100, { message: 'Name must be at most 100 characters long.' }),
+	name: z.string().min(1).max(100),
+});
+
+export const countryCodeObject = z.object({
+	calCode: z.string().length(2).toUpperCase().regex(/^[A-Z]{2}$/, 'Country code must be 2 letters.').nullable(),
+});
+
+export const boardObject = nameObject.extend({
+	type: z.enum(BoardType),
 });
