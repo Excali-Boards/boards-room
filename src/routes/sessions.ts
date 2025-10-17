@@ -1,9 +1,9 @@
-import { emailToUserId, parseZodError, securityUtils } from '../modules/functions';
-import { makeRoute, json } from '../services/routes';
+import { emailToUserId, parseZodError, securityUtils } from '../modules/functions.js';
+import { makeRoute, json } from '../services/routes.js';
 import { Device, Platforms } from '@prisma/client';
-import config from '../core/config';
-import { db } from '../core/prisma';
-import manager from '../index';
+import config from '../core/config.js';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 import { z } from 'zod';
 
 export default [

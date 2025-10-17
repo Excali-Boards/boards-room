@@ -1,11 +1,11 @@
-import { PermissionGrantResult, UserRole, GlobalRole, ResourceType, AccessLevel, GlobalResourceType, ResourceReturnEnum, ResourceTypeGeneric, GrantedRoles, GrantedRole } from '../types';
-import { getBoardResourceId, getCategoryResourceId, getGroupResourceId, securityUtils } from '../modules/functions';
+import { PermissionGrantResult, UserRole, GlobalRole, ResourceType, AccessLevel, GlobalResourceType, ResourceReturnEnum, ResourceTypeGeneric, GrantedRoles, GrantedRole } from '../types.js';
+import { getBoardResourceId, getCategoryResourceId, getGroupResourceId, securityUtils } from '../modules/functions.js';
 import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
-import { GrantPermissionsRequest } from '../routes/permissions';
-import { DBUserPartialType } from './vars';
-import { BoardsManager } from '../index';
-import config from '../core/config';
-import { db } from '../core/prisma';
+import { GrantPermissionsRequest } from '../routes/permissions.js';
+import { DBUserPartialType } from './vars.js';
+import { BoardsManager } from '../index.js';
+import config from '../core/config.js';
+import { db } from '../core/prisma.js';
 import crypto from 'crypto';
 
 // Permission hierarchy levels (higher number = more permissions)
@@ -134,6 +134,21 @@ export function canView<A extends GlobalResourceType>(DBUser: DBUserPartialType,
 		case 'board': targetPermission = BoardRole.BoardViewer; break;
 		case 'category': targetPermission = CategoryRole.CategoryViewer; break;
 		case 'group': targetPermission = GroupRole.GroupViewer; break;
+	}
+
+	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];
+}
+
+export function canEdit<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
+	const role = userHighestRole || getUserHighestRole(DBUser, resource);
+	if (!role) return false;
+
+	let targetPermission: UserRole | null = null;
+	switch (resource.type) {
+		case 'global': targetPermission = GlobalRole.Developer; break;
+		case 'board': targetPermission = BoardRole.BoardCollaborator; break;
+		case 'category': targetPermission = CategoryRole.CategoryCollaborator; break;
+		case 'group': targetPermission = GroupRole.GroupCollaborator; break;
 	}
 
 	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];

@@ -1,5 +1,5 @@
-import { json, makeRoute, text } from '../services/routes';
-import manager from '../index';
+import { json, makeRoute, text } from '../services/routes.js';
+import manager from '../index.js';
 
 export default [
 	makeRoute({

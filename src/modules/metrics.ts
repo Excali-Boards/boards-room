@@ -1,11 +1,11 @@
 import { Counter, Gauge, Histogram, register } from 'prom-client';
-import { monitoringConstants } from '../core/constants';
-import { RouteMethod, SystemStatus } from '../types';
+import { monitoringConstants } from '../core/constants.js';
+import { RouteMethod, SystemStatus } from '../types.js';
+import { BoardsManager } from '../index.js';
 import { MiddlewareHandler } from 'hono';
-import { BoardsManager } from '../index';
+import LoggerModule from './logger.js';
 import { routePath } from 'hono/route';
-import LoggerModule from './logger';
-import { db } from '../core/prisma';
+import { db } from '../core/prisma.js';
 import pidusage from 'pidusage';
 
 export class MetricsBase {
@@ -182,9 +182,9 @@ export async function getSystemMetrics(manager: BoardsManager): Promise<SystemSt
 		cpuUsage: parseFloat(stats.cpu.toFixed(2)),
 		memoryUsage: (memUsage.rss / (1024 * 1024)).toFixed(2) + ' MB',
 
-		activeRooms: manager.socket.roomData.size,
+		activeRooms: manager.socket.excalidrawSocket.roomData.size + manager.socket.tldrawSocket.roomData.size,
 		socketConnections: manager.socket.io.sockets.sockets.size,
-		queuedFiles: manager.socket.queuedFiles.size,
+		queuedFiles: manager.socket.excalidrawSocket.queuedFiles.size + manager.socket.tldrawSocket.queuedFiles.size,
 
 		totalUsers: await db(manager, 'user', 'count', {}) || 0,
 		totalInvites: await db(manager, 'invite', 'count', {}) || 0,

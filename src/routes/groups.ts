@@ -1,15 +1,15 @@
-import { parseZodError, securityUtils } from '../../modules/functions';
-import { canManage, getAccessLevel } from '../../other/permissions';
-import { json, makeRoute } from '../../services/routes';
-import { nameObject } from '../../core/config';
-import { db } from '../../core/prisma';
-import manager from '../../index';
+import { parseZodError, securityUtils } from '../modules/functions.js';
+import { canManage, getAccessLevel } from '../other/permissions.js';
+import { json, makeRoute } from '../services/routes.js';
+import { nameObject } from '../core/config.js';
+import { db } from '../core/prisma.js';
+import manager from '../index.js';
 import { z } from 'zod';
 
 export default [
 	// Groups.
 	makeRoute({
-		path: '/data/groups',
+		path: '/groups',
 		method: 'GET',
 		enabled: true,
 		auth: true,
@@ -69,7 +69,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups',
+		path: '/groups',
 		method: 'POST',
 		enabled: true,
 		auth: true,
@@ -97,7 +97,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups',
+		path: '/groups',
 		method: 'PUT',
 		enabled: true,
 		auth: true,
@@ -126,7 +126,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId',
+		path: '/groups/:groupId',
 		method: 'GET',
 		enabled: true,
 		auth: true,
@@ -150,6 +150,9 @@ export default [
 					groupId: true,
 					name: true,
 					index: true,
+					events: {
+						select: { eventId: true },
+					},
 					categories: {
 						where: c.var.isDev ? undefined : {
 							OR: [
@@ -178,7 +181,6 @@ export default [
 			});
 
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
-			else if (!DBGroup.categories.length && !c.var.isDev) return json(c, 403, { error: 'You do not have access to any categories in this group.' });
 
 			return json(c, 200, {
 				data: {
@@ -201,7 +203,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId',
+		path: '/groups/:groupId',
 		method: 'PATCH',
 		enabled: true,
 		auth: true,
@@ -225,7 +227,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/data/groups/:groupId',
+		path: '/groups/:groupId',
 		method: 'DELETE',
 		enabled: true,
 		auth: true,

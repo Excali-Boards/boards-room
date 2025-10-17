@@ -1,10 +1,11 @@
-import { SocketId, Collaborator, BinaryFileData } from '@excalidraw/excalidraw/dist/types/excalidraw/types';
-import { TSPrisma, BoardRole, CategoryRole, GroupRole, Invite as PrismaInvite } from '@prisma/client';
-import { ExcalidrawElement } from '@excalidraw/excalidraw/dist/types/excalidraw/element/types';
+import { TSPrisma, BoardRole, CategoryRole, GroupRole, Invite as PrismaInvite, BoardType } from '@prisma/client';
+import { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
+import { SocketId, Collaborator } from '@excalidraw/excalidraw/types';
+import type { RoomSnapshot, TLSocketRoom } from '@tldraw/sync';
+import { DBUserPartialType } from './other/vars.js';
 import { HttpBindings } from '@hono/node-server';
-import { DBUserPartialType } from './other/vars';
+import CustomMap from './modules/map.js';
 import { MiddlewareHandler } from 'hono';
-import CustomMap from './modules/map';
 
 export type WebResponse<T> = {
 	status: 200;
@@ -40,8 +41,6 @@ export type User = TSPrisma.TSPrismaModelsFull['User'];
 export type Group = TSPrisma.TSPrismaModelsFull['Group'];
 export type Category = TSPrisma.TSPrismaModelsFull['Category'];
 export type Board = TSPrisma.TSPrismaModelsFull['Board'];
-export type File = TSPrisma.TSPrismaModelsFull['File'];
-export type LoginMethod = TSPrisma.TSPrismaModelsFull['LoginMethod'];
 
 // Permission models
 export type GroupPermission = TSPrisma.TSPrismaModelsFull['GroupPermission'];
@@ -91,6 +90,8 @@ export type GrantedRole = {
 
 export type BareBoard = {
 	boardId: string;
+	boardType: BoardType;
+
 	files: string[];
 	version: number;
 	canEdit: boolean;
@@ -123,6 +124,26 @@ export type GrantedEntry = {
 	basedOnType: ResourceType;
 	basedOnResourceId: string;
 	basedOnResourceName: string;
+};
+
+export type AllRooms = {
+	boardId: string;
+	elements: number;
+	type: BoardType;
+	collaborators: CollabUser[];
+}[];
+
+export type CollabUser = {
+	id: string;
+	socketId: string;
+	username: string;
+	avatarUrl: string | null;
+};
+
+export type UploadFile = {
+	id: string;
+	mimeType: string;
+	data: string | File | ArrayBuffer | Uint8Array | Buffer;
 };
 
 // Routes.
@@ -165,16 +186,31 @@ export type RouteType<
 };
 
 // Socket.
-export type RoomData = {
+export type RoomData<T extends BoardType = BoardType> = {
 	boardId: string;
+} & (T extends 'Excalidraw' ? RoomDataExcalidraw : T extends 'Tldraw' ? RoomDataTldraw : never);
+
+export type RoomDataExcalidraw = {
+	boardType: 'Excalidraw';
 
 	files: string[];
 	elements: ExcalidrawElement[];
 	collaborators: CustomMap<SocketId, NoNestedReadonly<Collaborator>>;
 };
 
+export type RoomDataTldraw = {
+	boardType: 'Tldraw';
+
+	room: TLSocketRoom;
+	files: string[];
+	needsPersist: boolean;
+	collaborators: CustomMap<SocketId, Pick<NoNestedReadonly<Collaborator>, 'id' | 'username' | 'avatarUrl' | 'socketId'>>;
+};
+
 export type ClientData = {
 	elements: ExcalidrawElement[];
+} | {
+	snapshot: RoomSnapshot | null;
 };
 
 export type SceneBroadcastData = {
@@ -231,7 +267,7 @@ export type StatsData = {
 export type ActionType = 'add' | 'remove';
 export type FileActionData<T extends ActionType> = {
 	action: T;
-	files: T extends 'add' ? BinaryFileData[] : string[];
+	files: T extends 'add' ? UploadFile[] : string[];
 };
 
 // For: socket.emit or io.to().emit, io.emit
@@ -243,6 +279,8 @@ export type ServerToClientEvents = {
 	filesUpdated: (stats?: StatsData) => unknown;
 	preloadFiles: (files: string[]) => unknown;
 
+	tldraw: (data: string) => unknown;
+
 	followedBy: (data: string[]) => unknown;
 	setCollaborators: (collaborators: Collaborator[]) => unknown;
 	broadcastScene: (data: SceneBroadcastData) => unknown;
@@ -253,12 +291,13 @@ export type ServerToClientEvents = {
 
 // For: socket.on
 export type ClientToServerEvents = {
+	tldraw: (data: string) => unknown;
+
 	sendSnapshot: (data: SnapshotData) => unknown;
 	broadcastScene: (data: SceneBroadcastData) => unknown;
 	collaboratorPointerUpdate: (data: CollaboratorPointer) => unknown;
 	userFollow: (data: OnUserFollowedPayload) => unknown;
 	relayVisibleSceneBounds: (data: BoundsData<'roomId'>) => unknown;
-	fileAction: <T extends ActionType>(data: FileActionData<T>) => unknown;
 };
 
 export type SystemStatus = {

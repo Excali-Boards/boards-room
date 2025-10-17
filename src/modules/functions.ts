@@ -1,9 +1,12 @@
 import { encode as msgpackEncode, decode as msgpackDecode } from '@msgpack/msgpack';
+import { GrantedEntry, ResourceId, ResourceTypeGeneric, RoomData } from '../types.js';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
-import { PermissionHierarchy, ResourceRank } from '../other/permissions';
-import { GrantedEntry, ResourceId, ResourceTypeGeneric } from '../types';
-import config from '../core/config';
+import { PermissionHierarchy, ResourceRank } from '../other/permissions.js';
+import { BoardType } from '@prisma/client';
+import { BoardsManager } from '../index.js';
+import config from '../core/config.js';
 import z, { ZodError } from 'zod';
+import _unfurl from 'unfurl.js';
 import pako from 'pako';
 
 export function parseZodError(error: ZodError) {
@@ -165,6 +168,14 @@ export function firstToUpperCase<T extends string>(str: T): Capitalize<T> {
 	return str.charAt(0).toUpperCase() + str.slice(1) as Capitalize<T>;
 }
 
+export async function getBoardRoom<T extends BoardType>(manager: BoardsManager, boardId: string, boardType: T): Promise<RoomData<T> | null> {
+	switch (boardType) {
+		case 'Excalidraw': return await manager.socket.excalidrawSocket.getRoomData(boardId) as RoomData<T> | null;
+		case 'Tldraw': return await manager.socket.tldrawSocket.getRoomData(boardId) as RoomData<T> | null;
+		default: return null;
+	}
+}
+
 export function getGroupResourceId(resource: ResourceTypeGeneric<'group'>): ResourceId<'group'> {
 	return { groupId: resource.data.groupId };
 }
@@ -209,4 +220,17 @@ export function addPermission(map: Map<string, GrantedEntry[]>, userId: string, 
 			existing.basedOnResourceId = entry.basedOnResourceId;
 		}
 	}
+}
+
+export async function unfurl(url: string) {
+	const { title, description, open_graph, twitter_card, favicon } = await _unfurl.unfurl(url);
+
+	const image = open_graph?.images?.[0]?.url || twitter_card?.images?.[0]?.url;
+
+	return {
+		title,
+		description,
+		image,
+		favicon,
+	};
 }

@@ -1,8 +1,8 @@
-import { ExcalidrawElement, OrderedExcalidrawElement, InitializedExcalidrawImageElement } from '@excalidraw/excalidraw/dist/types/excalidraw/element/types';
-import { ReconciledExcalidrawElement } from '@excalidraw/excalidraw/dist/types/excalidraw/data/reconcile';
-import { ElementUpdate } from '@excalidraw/excalidraw/dist/types/excalidraw/element/mutateElement';
-import { AppState } from '@excalidraw/excalidraw/dist/types/excalidraw/types';
-import { SceneBounds } from '../types';
+import { ExcalidrawElement, OrderedExcalidrawElement, InitializedExcalidrawImageElement } from '@excalidraw/excalidraw/element/types';
+import { ReconciledExcalidrawElement } from '@excalidraw/excalidraw/data/reconcile';
+import { ElementUpdate } from '@excalidraw/excalidraw/element/mutateElement';
+import { AppState } from '@excalidraw/excalidraw/types';
+import { SceneBounds } from '../types.js';
 
 export function toIterable<T>(values: readonly T[] | ReadonlyMap<string, T>): Iterable<T> {
 	return Array.isArray(values) ? values : values.values();

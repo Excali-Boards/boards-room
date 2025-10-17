@@ -1,18 +1,22 @@
-import { HonoEnv, RouteType, StatusWebCode, StatusWebResponse } from '../types';
-import { securityUtils, toLowercase } from '../modules/functions';
+import { HonoEnv, RouteType, StatusWebCode, StatusWebResponse } from '../types.js';
+import { securityUtils, toLowercase } from '../modules/functions.js';
 import { getConnInfo } from '@hono/node-server/conninfo';
-import { securityConstants } from '../core/constants';
+import { securityConstants } from '../core/constants.js';
 import { Context, MiddlewareHandler } from 'hono';
-import { DBUserSelectArgs } from '../other/vars';
-import LoggerModule from '../modules/logger';
+import { DBUserSelectArgs } from '../other/vars.js';
+import LoggerModule from '../modules/logger.js';
 import { readdirSync, statSync } from 'fs';
 import { compress } from 'hono/compress';
-import { BoardsManager } from '../index';
+import { BoardsManager } from '../index.js';
 import { routePath } from 'hono/route';
-import config from '../core/config';
-import { db } from '../core/prisma';
+import config from '../core/config.js';
+import { db } from '../core/prisma.js';
 import { cors } from 'hono/cors';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default class Routes {
 	private ipHits: Map<string, { count: number; lastRequest: number; }> = new Map();
@@ -104,7 +108,7 @@ export default class Routes {
 
 			if (stat.isDirectory()) this.loadRoutes(filePath);
 			else if (file.endsWith('.js')) {
-				import(filePath).then((m) => {
+				import(`file://${filePath}`).then((m) => {
 					if (!m.default) return LoggerModule('API', `Route file ${file} has no default export.`, 'red');
 
 					if (Array.isArray(m.default)) {
@@ -187,7 +191,7 @@ export default class Routes {
 		};
 	}
 
-	private rateLimit(options = { windowMs: 60000, max: 50 }): MiddlewareHandler<HonoEnv> {
+	private rateLimit(options = { windowMs: 60000, max: 200 }): MiddlewareHandler<HonoEnv> { // 200 requests per minute
 		return async (c, next) => {
 			const info = getConnInfo(c);
 			const ip = info.remote.address || 'unknown';

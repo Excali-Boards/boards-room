@@ -25,6 +25,11 @@ enum Device {
     Other
 }
 
+enum BoardType {
+    Excalidraw
+    Tldraw
+}
+
 // Separate role enums for each resource type
 enum BoardRole {
     BoardViewer // read-only to specific board
@@ -48,8 +53,9 @@ enum GroupRole {
 model AllEnumsModel {
     dbId String @id @default(uuid())
 
-    platformEnum Platforms
-    deviceEnum   Device
+    platformEnum  Platforms
+    deviceEnum    Device
+    boardTypeEnum BoardType
 
     boardRoleEnum    BoardRole
     categoryRoleEnum CategoryRole

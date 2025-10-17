@@ -1,11 +1,11 @@
-import PrometheusMetrics from './modules/metrics';
+import PrometheusMetrics from './modules/metrics.js';
 import { PrismaClient } from '@prisma/client';
-import SocketServer from './services/socket';
-import LoggerModule from './modules/logger';
-import Routes from './services/routes';
-import Files from './services/files';
-import Utils from './modules/utils';
-import { HonoEnv } from './types';
+import SocketServer from './services/socket.js';
+import LoggerModule from './modules/logger.js';
+import Routes from './services/routes.js';
+import Files from './services/files.js';
+import Utils from './modules/utils.js';
+import { HonoEnv } from './types.js';
 import { Hono } from 'hono';
 
 console.clear();
