@@ -1,5 +1,5 @@
-import { PermissionGrantResult, UserRole, GlobalRole, ResourceType, AccessLevel, GlobalResourceType, ResourceReturnEnum, ResourceTypeGeneric, GrantedRoles, GrantedRole } from '../types.js';
-import { getBoardResourceId, getCategoryResourceId, getGroupResourceId, securityUtils } from '../modules/functions.js';
+import { PermissionGrantResult, UserRole, GlobalRole, ResourceType, AccessLevel, GlobalResourceType, ResourceReturnEnum, ResourceTypeGeneric, GrantedRoles, GrantedRole, GrantedEntry, ResourcePermissionsResult, PermissionCheckData } from '../types.js';
+import { addPermission, getBoardResourceId, getCategoryResourceId, getGroupResourceId, securityUtils } from '../modules/functions.js';
 import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
 import { GrantPermissionsRequest } from '../routes/permissions.js';
 import { DBUserPartialType } from './vars.js';
@@ -369,4 +369,215 @@ export async function applyPermissionGrants(manager: BoardsManager, result: Perm
 			}
 		}
 	});
+}
+
+export async function collectResourcePermissions(resourceType: ResourceType, resourceId: string, manager: BoardsManager): Promise<ResourcePermissionsResult> {
+	const usersWithAccess: Map<string, GrantedEntry[]> = new Map();
+
+	switch (resourceType) {
+		case 'board': {
+			const board = await db(manager, 'board', 'findUnique', {
+				where: { boardId: resourceId },
+				select: {
+					name: true,
+					boardId: true,
+					category: {
+						select: {
+							categoryId: true,
+							name: true,
+							group: { select: { groupId: true, name: true } },
+						},
+					},
+				},
+			});
+
+			if (!board) return { usersWithAccess, resource: null };
+
+			const categoryId = board.category.categoryId;
+			const categoryName = board.category.name;
+			const groupId = board.category.group.groupId;
+			const groupName = board.category.group.name;
+
+			const [boardPerms, categoryPerms, groupPerms] = await Promise.all([
+				db(manager, 'boardPermission', 'findMany', {
+					where: { boardId: board.boardId },
+					select: { userId: true, role: true },
+				}),
+				db(manager, 'categoryPermission', 'findMany', {
+					where: { categoryId },
+					select: { userId: true, role: true },
+				}),
+				db(manager, 'groupPermission', 'findMany', {
+					where: { groupId },
+					select: { userId: true, role: true },
+				}),
+			]);
+
+			for (const perm of boardPerms || []) {
+				addPermission(usersWithAccess, perm.userId, {
+					type: 'board',
+					role: perm.role,
+					resourceId: board.boardId,
+					basedOnType: 'board',
+					basedOnResourceId: board.boardId,
+					basedOnResourceName: board.name,
+				});
+			}
+
+			for (const perm of categoryPerms || []) {
+				addPermission(usersWithAccess, perm.userId, {
+					type: 'board',
+					role: perm.role,
+					resourceId: board.boardId,
+					basedOnType: 'category',
+					basedOnResourceId: categoryId,
+					basedOnResourceName: categoryName,
+				});
+			}
+
+			for (const perm of groupPerms || []) {
+				addPermission(usersWithAccess, perm.userId, {
+					type: 'board',
+					role: perm.role,
+					resourceId: board.boardId,
+					basedOnType: 'group',
+					basedOnResourceId: groupId,
+					basedOnResourceName: groupName,
+				});
+			}
+
+			return {
+				usersWithAccess,
+				resource: { id: board.boardId, name: board.name },
+			};
+		}
+		case 'category': {
+			const category = await db(manager, 'category', 'findUnique', {
+				where: { categoryId: resourceId },
+				select: {
+					categoryId: true,
+					name: true,
+					group: { select: { groupId: true, name: true } },
+				},
+			});
+
+			if (!category) return { usersWithAccess, resource: null };
+
+			const groupId = category.group.groupId;
+			const groupName = category.group.name;
+
+			const [categoryPerms, groupPerms] = await Promise.all([
+				db(manager, 'categoryPermission', 'findMany', {
+					where: { categoryId: category.categoryId },
+					select: { userId: true, role: true },
+				}),
+				db(manager, 'groupPermission', 'findMany', {
+					where: { groupId },
+					select: { userId: true, role: true },
+				}),
+			]);
+
+			for (const perm of categoryPerms || []) {
+				addPermission(usersWithAccess, perm.userId, {
+					type: 'category',
+					role: perm.role,
+					resourceId: category.categoryId,
+					basedOnType: 'category',
+					basedOnResourceId: category.categoryId,
+					basedOnResourceName: category.name,
+				});
+			}
+
+			for (const perm of groupPerms || []) {
+				addPermission(usersWithAccess, perm.userId, {
+					type: 'category',
+					role: perm.role,
+					resourceId: category.categoryId,
+					basedOnType: 'group',
+					basedOnResourceId: groupId,
+					basedOnResourceName: groupName,
+				});
+			}
+
+			return {
+				usersWithAccess,
+				resource: { id: category.categoryId, name: category.name },
+			};
+		}
+		case 'group': {
+			const group = await db(manager, 'group', 'findUnique', {
+				where: { groupId: resourceId },
+				select: { groupId: true, name: true },
+			});
+
+			if (!group) return { usersWithAccess, resource: null };
+
+			const groupPerms = await db(manager, 'groupPermission', 'findMany', {
+				where: { groupId: group.groupId },
+				select: { userId: true, role: true },
+			});
+
+			for (const perm of groupPerms || []) {
+				addPermission(usersWithAccess, perm.userId, {
+					type: 'group',
+					role: perm.role,
+					resourceId: group.groupId,
+					basedOnType: 'group',
+					basedOnResourceId: group.groupId,
+					basedOnResourceName: group.name,
+				});
+			}
+
+			return {
+				usersWithAccess,
+				resource: { id: group.groupId, name: group.name },
+			};
+		}
+	}
+}
+
+export async function getPermissionCheckData<T extends ResourceType>(resourceType: T, resourceId: string, manager: BoardsManager): Promise<PermissionCheckData<T> | null> {
+	switch (resourceType) {
+		case 'board': {
+			const board = await db(manager, 'board', 'findUnique', {
+				where: { boardId: resourceId },
+				select: {
+					boardId: true,
+					category: {
+						select: {
+							categoryId: true,
+							group: { select: { groupId: true } },
+						},
+					},
+				},
+			});
+
+			if (!board) return null;
+
+			return {
+				type: 'board',
+				data: {
+					boardId: board.boardId,
+					categoryId: board.category.categoryId,
+					groupId: board.category.group.groupId,
+				},
+			} as PermissionCheckData<T>;
+		}
+		case 'category': {
+			const category = await db(manager, 'category', 'findUnique', {
+				where: { categoryId: resourceId },
+				select: { categoryId: true, group: { select: { groupId: true } } },
+			});
+
+			if (!category) return null;
+
+			return {
+				type: 'category',
+				data: { categoryId: category.categoryId, groupId: category.group.groupId },
+			} as PermissionCheckData<T>;
+		}
+		case 'group': {
+			return { type: 'group', data: { groupId: resourceId } } as PermissionCheckData<T>;
+		}
+	}
 }
