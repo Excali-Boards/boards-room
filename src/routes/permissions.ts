@@ -1,8 +1,8 @@
-import { processPermissionGrants, applyPermissionGrants, canManagePermissions } from '../other/permissions.js';
-import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
+import { processPermissionGrants, applyPermissionGrants, canManagePermissions, collectResourcePermissions, getPermissionCheckData } from '../other/permissions.js';
 import { addPermission, parseZodError } from '../modules/functions.js';
+import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
+import { GrantedEntry, PermUser, ResourceType } from '../types.js';
 import { GetBatchResult } from '@prisma/client/runtime/library';
-import { GrantedEntry, ResourceType } from '../types.js';
 import { json, makeRoute } from '../services/routes.js';
 import { db } from '../core/prisma.js';
 import manager from '../index.js';
@@ -22,117 +22,19 @@ export default [
 			const resourceId = c.req.query('id')!;
 			if (!resourceId) return json(c, 400, { error: 'Missing resource ID.' });
 
-			const usersWithAccess: Map<string, GrantedEntry[]> = new Map();
+			const { usersWithAccess, resource } = await collectResourcePermissions(
+				resourceType,
+				resourceId,
+				manager,
+			);
 
-			switch (resourceType) {
-				case 'board': {
-					const board = await db(manager, 'board', 'findUnique', {
-						where: { boardId: resourceId },
-						select: {
-							name: true,
-							boardId: true,
-							category: { select: { categoryId: true, name: true, group: { select: { groupId: true, name: true } } } },
-						},
-					});
+			if (!resource) return json(c, 404, { error: `${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)} not found.` });
 
-					if (!board) return json(c, 404, { error: 'Board not found.' });
+			const permCheckData = await getPermissionCheckData(resourceType, resourceId, manager);
+			if (!permCheckData) return json(c, 404, { error: 'Resource not found.' });
 
-					const categoryId = board.category.categoryId;
-					const categoryName = board.category.name;
-
-					const groupId = board.category.group.groupId;
-					const groupName = board.category.group.name;
-
-					const canView = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: board.boardId, categoryId, groupId } });
-					if (!canView) return json(c, 403, { error: 'No permission' });
-
-					const [boardPerms, categoryPerms, groupPerms] = await Promise.all([
-						db(manager, 'boardPermission', 'findMany', { where: { boardId: board.boardId }, select: { userId: true, role: true } }),
-						db(manager, 'categoryPermission', 'findMany', { where: { categoryId }, select: { userId: true, role: true } }),
-						db(manager, 'groupPermission', 'findMany', { where: { groupId }, select: { userId: true, role: true } }),
-					]);
-
-					for (const perm of boardPerms || []) {
-						addPermission(usersWithAccess, perm.userId, {
-							type: 'board', role: perm.role, resourceId: board.boardId,
-							basedOnType: 'board', basedOnResourceId: board.boardId,
-							basedOnResourceName: board.name,
-						});
-					}
-
-					for (const perm of categoryPerms || []) {
-						addPermission(usersWithAccess, perm.userId, {
-							type: 'board', role: perm.role, resourceId: board.boardId,
-							basedOnType: 'category', basedOnResourceId: categoryId,
-							basedOnResourceName: categoryName,
-						});
-					}
-
-					for (const perm of groupPerms || []) {
-						addPermission(usersWithAccess, perm.userId, {
-							type: 'board', role: perm.role, resourceId: board.boardId,
-							basedOnType: 'group', basedOnResourceId: groupId,
-							basedOnResourceName: groupName,
-						});
-					}
-
-					break;
-				}
-				case 'category': {
-					const category = await db(manager, 'category', 'findUnique', { where: { categoryId: resourceId }, select: { categoryId: true, name: true, group: { select: { groupId: true, name: true } } } });
-					if (!category) return json(c, 404, { error: 'Category not found.' });
-
-					const groupId = category.group.groupId;
-					const groupName = category.group.name;
-
-					const canView = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: category.categoryId, groupId } });
-					if (!canView) return json(c, 403, { error: 'No permission' });
-
-					const [categoryPerms, groupPerms] = await Promise.all([
-						db(manager, 'categoryPermission', 'findMany', { where: { categoryId: category.categoryId }, select: { userId: true, role: true } }),
-						db(manager, 'groupPermission', 'findMany', { where: { groupId }, select: { userId: true, role: true } }),
-					]);
-
-					for (const perm of categoryPerms || []) {
-						addPermission(usersWithAccess, perm.userId, {
-							type: 'category', role: perm.role, resourceId: category.categoryId,
-							basedOnType: 'category', basedOnResourceId: category.categoryId,
-							basedOnResourceName: category.name,
-						});
-					}
-
-					for (const perm of groupPerms || []) {
-						addPermission(usersWithAccess, perm.userId, {
-							type: 'category', role: perm.role, resourceId: category.categoryId,
-							basedOnType: 'group', basedOnResourceId: groupId,
-							basedOnResourceName: groupName,
-						});
-					}
-
-					break;
-				}
-				case 'group': {
-					const group = await db(manager, 'group', 'findUnique', { where: { groupId: resourceId }, select: { groupId: true, name: true } });
-					if (!group) return json(c, 404, { error: 'Group not found' });
-
-					const canView = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } });
-					if (!canView) return json(c, 403, { error: 'No permission' });
-
-					const groupPerms = await db(manager, 'groupPermission', 'findMany', {
-						where: { groupId: group.groupId }, select: { userId: true, role: true },
-					});
-
-					for (const perm of groupPerms || []) {
-						addPermission(usersWithAccess, perm.userId, {
-							type: 'group', role: perm.role, resourceId: group.groupId,
-							basedOnType: 'group', basedOnResourceId: group.groupId,
-							basedOnResourceName: group.name,
-						});
-					}
-
-					break;
-				}
-			}
+			const canView = canManagePermissions(c.var.DBUser, permCheckData);
+			if (!canView) return json(c, 403, { error: 'No permission' });
 
 			const userIds = Array.from(usersWithAccess.keys());
 			const users = userIds.length ? (await db(manager, 'user', 'findMany', {
@@ -140,10 +42,166 @@ export default [
 				select: { userId: true, email: true, displayName: true, avatarUrl: true },
 			})) || [] : [];
 
-			const result = users.map((user) => ({
+			const result: PermUser[] = users.map((user) => ({
 				...user,
 				permissions: usersWithAccess.get(user.userId) || [],
 			}));
+
+			return json(c, 200, { data: result });
+		},
+	}),
+	makeRoute({
+		path: '/permissions/view-all',
+		method: 'POST',
+		enabled: true,
+		devOnly: true,
+		auth: true,
+
+		handler: async (c) => {
+			const isValid = getAllUserPermissionsSchema.safeParse(await c.req.json().catch(() => ({})));
+			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
+
+			const userIds = isValid.data.userIds;
+
+			const results = await Promise.allSettled([
+				db(manager, 'user', 'findMany', { where: { userId: { in: userIds } }, select: { userId: true, email: true, displayName: true, avatarUrl: true } }).catch(() => null),
+
+				db(manager, 'boardPermission', 'findMany', { where: { userId: { in: userIds } }, select: { userId: true, boardId: true, role: true } }).catch(() => null),
+				db(manager, 'categoryPermission', 'findMany', { where: { userId: { in: userIds } }, select: { userId: true, categoryId: true, role: true } }).catch(() => null),
+				db(manager, 'groupPermission', 'findMany', { where: { userId: { in: userIds } }, select: { userId: true, groupId: true, role: true } }).catch(() => null),
+
+				db(manager, 'board', 'findMany', {
+					select: {
+						boardId: true,
+						name: true,
+						category: {
+							select: {
+								categoryId: true,
+								name: true,
+								group: { select: { groupId: true, name: true } },
+							},
+						},
+					},
+				}).catch(() => null),
+
+				db(manager, 'category', 'findMany', {
+					select: {
+						categoryId: true,
+						name: true,
+						group: { select: { groupId: true, name: true } },
+					},
+				}).catch(() => null),
+
+				db(manager, 'group', 'findMany', {
+					select: { groupId: true, name: true },
+				}).catch(() => null),
+			]);
+
+			const allUsers = results[0].status === 'fulfilled' && results[0].value ? results[0].value : [];
+
+			const allBoardPerms = results[1].status === 'fulfilled' && results[1].value ? results[1].value : [];
+			const allCategoryPerms = results[2].status === 'fulfilled' && results[2].value ? results[2].value : [];
+			const allGroupPerms = results[3].status === 'fulfilled' && results[3].value ? results[3].value : [];
+
+			const allBoards = results[4].status === 'fulfilled' && results[4].value ? results[4].value : [];
+			const allCategories = results[5].status === 'fulfilled' && results[5].value ? results[5].value : [];
+			const allGroups = results[6].status === 'fulfilled' && results[6].value ? results[6].value : [];
+
+			const boardMap = new Map(allBoards.map((b) => [b.boardId, b]) || []);
+			const categoryMap = new Map(allCategories.map((c) => [c.categoryId, c]) || []);
+			const groupMap = new Map(allGroups.map((g) => [g.groupId, g]) || []);
+
+			const result: Record<string, PermUser> = {};
+
+			for (const userId of isValid.data.userIds) {
+				const user = allUsers.find((u) => u.userId === userId);
+				if (!user) continue;
+
+				const userPermissions: Map<string, GrantedEntry[]> = new Map();
+
+				for (const perm of allBoardPerms.filter((p) => p.userId === userId) || []) {
+					const board = boardMap.get(perm.boardId);
+					if (!board) continue;
+
+					addPermission(userPermissions, userId, {
+						type: 'board',
+						role: perm.role,
+						resourceId: board.boardId,
+						basedOnType: 'board',
+						basedOnResourceId: board.boardId,
+						basedOnResourceName: board.name,
+					});
+				}
+
+				for (const perm of allCategoryPerms.filter((p) => p.userId === userId) || []) {
+					const category = categoryMap.get(perm.categoryId);
+					if (!category) continue;
+
+					addPermission(userPermissions, userId, {
+						type: 'category',
+						role: perm.role,
+						resourceId: category.categoryId,
+						basedOnType: 'category',
+						basedOnResourceId: category.categoryId,
+						basedOnResourceName: category.name,
+					});
+
+					for (const board of allBoards || []) {
+						if (board.category.categoryId === perm.categoryId) {
+							addPermission(userPermissions, userId, {
+								type: 'board',
+								role: perm.role,
+								resourceId: board.boardId,
+								basedOnType: 'category',
+								basedOnResourceId: category.categoryId,
+								basedOnResourceName: category.name,
+							});
+						}
+					}
+				}
+
+				for (const perm of allGroupPerms.filter((p) => p.userId === userId) || []) {
+					const group = groupMap.get(perm.groupId);
+					if (!group) continue;
+
+					addPermission(userPermissions, userId, {
+						type: 'group',
+						role: perm.role,
+						resourceId: group.groupId,
+						basedOnType: 'group',
+						basedOnResourceId: group.groupId,
+						basedOnResourceName: group.name,
+					});
+
+					for (const category of allCategories || []) {
+						if (category.group.groupId === perm.groupId) {
+							addPermission(userPermissions, userId, {
+								type: 'category',
+								role: perm.role,
+								resourceId: category.categoryId,
+								basedOnType: 'group',
+								basedOnResourceId: group.groupId,
+								basedOnResourceName: group.name,
+							});
+						}
+					}
+
+					for (const board of allBoards || []) {
+						if (board.category.group.groupId === perm.groupId) {
+							addPermission(userPermissions, userId, {
+								type: 'board',
+								role: perm.role,
+								resourceId: board.boardId,
+								basedOnType: 'group',
+								basedOnResourceId: group.groupId,
+								basedOnResourceName: group.name,
+							});
+						}
+					}
+				}
+
+				result[userId] = { ...user, permissions: userPermissions.get(userId) || [] };
+			}
 
 			return json(c, 200, { data: result });
 		},
@@ -317,4 +375,8 @@ export const revokePermissionSchema = z.object({
 	userId: z.string(),
 	resourceType: z.enum(['group', 'category', 'board']),
 	resourceId: z.string(),
+});
+
+export const getAllUserPermissionsSchema = z.object({
+	userIds: z.union([z.string(), z.array(z.string())]).transform((val) => typeof val === 'string' ? val.split(',').map((s) => s.trim()).filter(Boolean) : val),
 });

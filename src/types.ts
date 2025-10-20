@@ -81,6 +81,23 @@ export type PermissionGrantResult = {
 	updatedPermissions: (GrantedRole & { dbId: string })[];
 };
 
+export type ResourcePermissionsResult = {
+	usersWithAccess: Map<string, GrantedEntry[]>;
+	resource: { id: string; name: string; } | null;
+};
+
+export type PermissionCheckData<T extends ResourceType> = {
+	type: T; data: ResourceId<T>;
+};
+
+export type PermUser = {
+	email: string;
+	userId: string;
+	displayName: string;
+	avatarUrl: string | null;
+	permissions: GrantedEntry[];
+};
+
 export type GrantedRoles = GrantedRole[];
 export type GrantedRole = {
 	type: ResourceType;
