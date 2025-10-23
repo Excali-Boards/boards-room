@@ -106,6 +106,11 @@ export default [
 					index: true,
 					totalSizeBytes: true,
 					scheduledForDeletion: true,
+					flashcardDeck: {
+						select: {
+							deckId: true,
+						},
+					},
 					files: {
 						select: {
 							fileId: true,
@@ -157,6 +162,7 @@ export default [
 						totalSizeBytes: DBBoard.totalSizeBytes,
 						dataUrl: `${config.s3.endpoint}/${config.s3.bucket}/boards/${DBBoard.boardId}.bin`,
 						scheduledForDeletion: DBBoard.scheduledForDeletion,
+						hasFlashcards: DBBoard.flashcardDeck !== null,
 						files: DBBoard.files.map((file) => ({
 							fileId: file.fileId,
 							mimeType: file.mimeType,
@@ -259,7 +265,7 @@ export default [
 		},
 	}),
 	makeRoute({
-		path: '/groups/:groupId/categories/:categoryId/boards/:boardId/room',
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId/room-kick',
 		method: 'POST',
 		enabled: true,
 		auth: true,

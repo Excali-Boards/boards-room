@@ -1,9 +1,9 @@
-import { encode as msgpackEncode, decode as msgpackDecode } from '@msgpack/msgpack';
 import { GrantedEntry, ResourceId, ResourceTypeGeneric, RoomData } from '../types.js';
+import { encode as msgpackEncode, decode as msgpackDecode } from '@msgpack/msgpack';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import { PermissionHierarchy, ResourceRank } from '../other/permissions.js';
-import { BoardType } from '@prisma/client';
 import { BoardsManager } from '../index.js';
+import { BoardType } from '@prisma/client';
 import config from '../core/config.js';
 import z, { ZodError } from 'zod';
 import _unfurl from 'unfurl.js';
@@ -126,6 +126,20 @@ export const securityUtils = {
 	},
 	randomString: (length: number): string => {
 		return randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+	},
+
+	sanitizeInput: (input: string): string => {
+		return input.replace(/[<>&"'`]/g, (char) => {
+			switch (char) {
+				case '<': return '&lt;';
+				case '>': return '&gt;';
+				case '&': return '&amp;';
+				case '"': return '&quot;';
+				case "'": return '&#39;';
+				case '`': return '&#96;';
+				default: return char;
+			}
+		});
 	},
 };
 

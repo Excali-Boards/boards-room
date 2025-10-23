@@ -115,6 +115,11 @@ export default [
 							index: true,
 							totalSizeBytes: true,
 							scheduledForDeletion: true,
+							flashcardDeck: {
+								select: {
+									deckId: true,
+								},
+							},
 						},
 					},
 				},
@@ -142,6 +147,7 @@ export default [
 						index: board.index,
 						accessLevel: getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId: board.boardId, categoryId, groupId } }) || 'read',
 						totalSizeBytes: board.totalSizeBytes,
+						hasFlashcards: board.flashcardDeck !== null,
 						scheduledForDeletion: board.scheduledForDeletion,
 						dataUrl: `${config.s3.endpoint}/${config.s3.bucket}/boards/${board.boardId}.bin`,
 					})),

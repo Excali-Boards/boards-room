@@ -159,7 +159,7 @@ export default [
 				boardRole: boardRole || null,
 			};
 
-			const invite = await db(manager, 'invite', 'create', { data: inviteData }).catch(() => null);
+			const invite = await db(manager, 'invite', 'create', { data: inviteData });
 			if (!invite) return json(c, 500, { error: 'Failed to create invite. Please try again.' });
 
 			return json(c, 200, {

@@ -15,13 +15,8 @@ export default class Utils {
 	private async performCleanup(): Promise<void> {
 		const now = new Date();
 
-		await db(this.manager, 'session', 'deleteMany', {
-			where: { expiresAt: { lte: now } },
-		}).catch(() => null);
-
-		await db(this.manager, 'invite', 'deleteMany', {
-			where: { expiresAt: { lte: now } },
-		}).catch(() => null);
+		await db(this.manager, 'session', 'deleteMany', { where: { expiresAt: { lte: now } } }).catch(() => null);
+		await db(this.manager, 'invite', 'deleteMany', { where: { expiresAt: { lte: now } } }).catch(() => null);
 
 		await this.manager.files.deleteUnusedFiles().catch(() => null);
 
