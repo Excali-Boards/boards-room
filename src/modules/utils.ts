@@ -25,6 +25,10 @@ export default class Utils {
 			include: { files: true },
 		}) || [];
 
+		const DBInvites = await db(this.manager, 'invite', 'findMany', {
+			where: { boardIds: { hasSome: DBBoards.map((board) => board.boardId) } },
+		}) || [];
+
 		if (DBBoards?.length) {
 			const boardIds = DBBoards.map((board) => board.boardId);
 			for (const board of DBBoards) {
@@ -32,9 +36,17 @@ export default class Utils {
 				this.manager.files.deleteMediaFiles(board.boardId, board.files.map((file) => file.fileId));
 			}
 
-			await db(this.manager, 'board', 'deleteMany', {
-				where: { boardId: { in: boardIds } },
-			});
+			await db(this.manager, 'board', 'deleteMany', { where: { boardId: { in: boardIds } } }).catch(() => null);
+
+			const boardInvites = DBInvites.filter((invite) => invite.boardIds.some((id) => boardIds.includes(id)));
+			for (const invite of boardInvites) {
+				if (invite.boardIds.length === 1 && !invite.categoryIds.length && !invite.groupIds.length) {
+					await db(this.manager, 'invite', 'delete', { where: { dbId: invite.dbId } }).catch(() => null);
+				} else {
+					const updatedBoardIds = invite.boardIds.filter((id) => !boardIds.includes(id));
+					await db(this.manager, 'invite', 'update', { where: { dbId: invite.dbId }, data: { boardIds: updatedBoardIds } }).catch(() => null);
+				}
+			}
 		}
 	}
 
