@@ -159,14 +159,14 @@ export default [
 				boardRole: boardRole || null,
 			};
 
-			const invite = await db(manager, 'invite', 'create', { data: inviteData });
-			if (!invite) return json(c, 500, { error: 'Failed to create invite. Please try again.' });
+			const DBInvite = await db(manager, 'invite', 'create', { data: inviteData });
+			if (!DBInvite) return json(c, 500, { error: 'Failed to create invite. Please try again.' });
 
 			return json(c, 200, {
 				data: {
-					code: invite.code,
-					expiresAt: invite.expiresAt,
-					maxUses: invite.maxUses,
+					code: DBInvite.code,
+					expiresAt: DBInvite.expiresAt,
+					maxUses: DBInvite.maxUses,
 				},
 			});
 		},
@@ -180,19 +180,19 @@ export default [
 		handler: async (c) => {
 			const code = c.req.param('code');
 
-			const invite = await db(manager, 'invite', 'findUnique', { where: { code }, include: { creator: { select: { userId: true, displayName: true, avatarUrl: true } } } });
-			if (!invite) return json(c, 404, { error: 'Invite not found.' });
+			const DBInvite = await db(manager, 'invite', 'findUnique', { where: { code }, include: { creator: { select: { userId: true, displayName: true, avatarUrl: true } } } });
+			if (!DBInvite) return json(c, 404, { error: 'Invite not found.' });
 
 			return json(c, 200, {
 				data: {
-					code: invite.code,
-					maxUses: invite.maxUses,
-					expiresAt: invite.expiresAt,
-					currentUses: invite.currentUses,
+					code: DBInvite.code,
+					maxUses: DBInvite.maxUses,
+					expiresAt: DBInvite.expiresAt,
+					currentUses: DBInvite.currentUses,
 					invitedBy: {
-						userId: invite.creator.userId,
-						displayName: invite.creator.displayName,
-						avatarUrl: invite.creator.avatarUrl,
+						userId: DBInvite.creator.userId,
+						displayName: DBInvite.creator.displayName,
+						avatarUrl: DBInvite.creator.avatarUrl,
 					},
 				},
 			});
@@ -207,38 +207,38 @@ export default [
 		handler: async (c) => {
 			const code = c.req.param('code');
 
-			const invite = await db(manager, 'invite', 'findUnique', { where: { code } });
-			if (!invite) return json(c, 404, { error: 'Invite not found.' });
+			const DBInvite = await db(manager, 'invite', 'findUnique', { where: { code } });
+			if (!DBInvite) return json(c, 404, { error: 'Invite not found.' });
 
-			if (invite.expiresAt && invite.expiresAt < new Date()) {
-				await db(manager, 'invite', 'delete', { where: { dbId: invite.dbId } }).catch(() => null);
+			if (DBInvite.expiresAt && DBInvite.expiresAt < new Date()) {
+				await db(manager, 'invite', 'delete', { where: { dbId: DBInvite.dbId } }).catch(() => null);
 				return json(c, 400, { error: 'Invite has expired.' });
 			}
 
-			if (invite.maxUses && invite.currentUses >= invite.maxUses) {
-				await db(manager, 'invite', 'delete', { where: { dbId: invite.dbId } }).catch(() => null);
+			if (DBInvite.maxUses && DBInvite.currentUses >= DBInvite.maxUses) {
+				await db(manager, 'invite', 'delete', { where: { dbId: DBInvite.dbId } }).catch(() => null);
 				return json(c, 400, { error: 'Invite has reached its usage limit.' });
 			}
 
 			const userId = c.var.DBUser.userId;
-			if (invite.createdBy === userId) return json(c, 400, { error: 'You cannot use an invite you created yourself.' });
+			if (DBInvite.createdBy === userId) return json(c, 400, { error: 'You cannot use an invite you created yourself.' });
 
 			const permissionResult = await processPermissionGrants(manager, {
 				userId,
-				groupIds: invite.groupIds,
-				categoryIds: invite.categoryIds,
-				boardIds: invite.boardIds,
-				groupRole: invite.groupRole || undefined,
-				categoryRole: invite.categoryRole || undefined,
-				boardRole: invite.boardRole || undefined,
+				groupIds: DBInvite.groupIds,
+				categoryIds: DBInvite.categoryIds,
+				boardIds: DBInvite.boardIds,
+				groupRole: DBInvite.groupRole || undefined,
+				categoryRole: DBInvite.categoryRole || undefined,
+				boardRole: DBInvite.boardRole || undefined,
 			});
 
 			if (permissionResult.newPermissions.length === 0 && permissionResult.updatedPermissions.length === 0) {
 				return json(c, 400, { error: 'You already have equal or higher permissions for all resources in this invite.' });
 			}
 
-			await applyPermissionGrants(manager, permissionResult, invite.createdBy, userId);
-			await db(manager, 'invite', 'update', { where: { dbId: invite.dbId }, data: { currentUses: { increment: 1 } } }).catch(() => null);
+			await applyPermissionGrants(manager, permissionResult, DBInvite.createdBy, userId);
+			await db(manager, 'invite', 'update', { where: { dbId: DBInvite.dbId }, data: { currentUses: { increment: 1 } } }).catch(() => null);
 
 			const allGrantedPermissions = [
 				...permissionResult.newPermissions,
@@ -270,6 +270,10 @@ export default [
 				}) : [],
 			]);
 
+			if (DBInvite.maxUses && DBInvite.currentUses + 1 >= DBInvite.maxUses) {
+				await db(manager, 'invite', 'delete', { where: { dbId: DBInvite.dbId } }).catch(() => null);
+			}
+
 			return json(c, 200, {
 				data: {
 					granted: allGrantedPermissions,
@@ -291,12 +295,12 @@ export default [
 		handler: async (c) => {
 			const code = c.req.param('code');
 
-			const invite = await db(manager, 'invite', 'findUnique', { where: { code } });
-			if (!invite) return json(c, 404, { error: 'Invite not found.' });
-			else if (invite.createdBy !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to renew this invite.' });
+			const DBInvite = await db(manager, 'invite', 'findUnique', { where: { code } });
+			if (!DBInvite) return json(c, 404, { error: 'Invite not found.' });
+			else if (DBInvite.createdBy !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to renew this invite.' });
 
 			const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-			const updated = await db(manager, 'invite', 'update', { where: { dbId: invite.dbId }, data: { expiresAt: newExpiry } });
+			const updated = await db(manager, 'invite', 'update', { where: { dbId: DBInvite.dbId }, data: { expiresAt: newExpiry } });
 			if (!updated) return json(c, 500, { error: 'Failed to renew invite. Please try again.' });
 
 			return json(c, 200, {
@@ -318,11 +322,11 @@ export default [
 		handler: async (c) => {
 			const code = c.req.param('code');
 
-			const invite = await db(manager, 'invite', 'findUnique', { where: { code } });
-			if (!invite) return json(c, 404, { error: 'Invite not found.' });
-			else if (invite.createdBy !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to revoke this invite.' });
+			const DBInvite = await db(manager, 'invite', 'findUnique', { where: { code } });
+			if (!DBInvite) return json(c, 404, { error: 'Invite not found.' });
+			else if (DBInvite.createdBy !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to revoke this invite.' });
 
-			const deleted = await db(manager, 'invite', 'delete', { where: { dbId: invite.dbId } });
+			const deleted = await db(manager, 'invite', 'delete', { where: { dbId: DBInvite.dbId } });
 			if (!deleted) return json(c, 500, { error: 'Failed to revoke invite. Please try again.' });
 
 			return json(c, 200, { data: 'Invite revoked successfully.' });
