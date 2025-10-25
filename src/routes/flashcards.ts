@@ -1,4 +1,4 @@
-import { getAccessLevel, canEdit, canView, canManage } from '../other/permissions.js';
+import { canView, canManage, getBoardAccessLevel, canEditBoardWithIds } from '../other/permissions.js';
 import { parseZodError, securityUtils } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { db } from '../core/prisma.js';
@@ -15,7 +15,7 @@ export default [
 		handler: async (c) => {
 			const { groupId, categoryId, boardId } = c.req.param();
 
-			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'board', data: { groupId, categoryId, boardId } });
+			const accessLevel = getBoardAccessLevel(c.var.DBUser, boardId, categoryId, groupId);
 			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this board.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId } });
@@ -56,7 +56,7 @@ export default [
 			const isValid = cardArray.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const canEditBoard = canEdit(c.var.DBUser, { type: 'board', data: { groupId, categoryId, boardId } });
+			const canEditBoard = canEditBoardWithIds(c.var.DBUser, boardId, categoryId, groupId);
 			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to add cards to this deck.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId } });
@@ -97,8 +97,8 @@ export default [
 			const isValid = cardUpdateArray.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const canEditBoard = canEdit(c.var.DBUser, { type: 'board', data: { groupId, categoryId, boardId } });
-			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to edit cards.' });
+			const canEditBoard = canEditBoardWithIds(c.var.DBUser, boardId, categoryId, groupId);
+			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to edit cards in this deck.' });
 
 			const DBDeck = await db(manager, 'flashcardDeck', 'findFirst', { where: { boardId }, include: { cards: { select: { cardId: true } } } });
 			if (!DBDeck) return json(c, 404, { error: 'Deck not found.' });
@@ -135,8 +135,8 @@ export default [
 			const isValid = z.array(z.string()).safeParse(await c.req.json().catch(() => []));
 			if (!isValid.success || !isValid.data.length) return json(c, 400, { error: 'Invalid card IDs.' });
 
-			const canEditBoard = canEdit(c.var.DBUser, { type: 'board', data: { groupId, categoryId, boardId } });
-			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to delete cards.' });
+			const canEditBoard = canEditBoardWithIds(c.var.DBUser, boardId, categoryId, groupId);
+			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to delete cards in this deck.' });
 
 			const DBDeck = await db(manager, 'flashcardDeck', 'findFirst', { where: { boardId } });
 			if (!DBDeck) return json(c, 404, { error: 'Deck not found.' });
@@ -164,7 +164,7 @@ export default [
 		handler: async (c) => {
 			const { groupId, categoryId, boardId } = c.req.param();
 
-			const canEditBoard = canEdit(c.var.DBUser, { type: 'board', data: { groupId, categoryId, boardId } });
+			const canEditBoard = canEditBoardWithIds(c.var.DBUser, boardId, categoryId, groupId);
 			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to initialize a flashcard deck for this board.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId }, select: { boardId: true, flashcardDeck: true } });
@@ -219,8 +219,8 @@ export default [
 			const isValid = cardArray.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const canEditBoard = canEdit(c.var.DBUser, { type: 'board', data: { groupId, categoryId, boardId } });
-			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to override cards.' });
+			const canEditBoard = canEditBoardWithIds(c.var.DBUser, boardId, categoryId, groupId);
+			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to override cards in this deck.' });
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
@@ -313,8 +313,8 @@ export default [
 			const isValid = z.array(z.string()).safeParse(await c.req.json().catch(() => []));
 			if (!isValid.success || !isValid.data.length) return json(c, 400, { error: 'Invalid card order.' });
 
-			const canEditBoard = canEdit(c.var.DBUser, { type: 'board', data: { groupId, categoryId, boardId } });
-			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to reorder cards.' });
+			const canEditBoard = canEditBoardWithIds(c.var.DBUser, boardId, categoryId, groupId);
+			if (!canEditBoard) return json(c, 403, { error: 'You do not have permission to reorder cards in this deck.' });
 
 			const DBDeck = await db(manager, 'flashcardDeck', 'findFirst', { where: { boardId } });
 			if (!DBDeck) return json(c, 404, { error: 'Deck not found.' });

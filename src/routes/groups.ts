@@ -1,5 +1,5 @@
+import { canManage, getGroupAccessLevel, getCategoryAccessLevel } from '../other/permissions.js';
 import { parseZodError, securityUtils } from '../modules/functions.js';
-import { canManage, getAccessLevel } from '../other/permissions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { nameObject } from '../core/config.js';
 import { db } from '../core/prisma.js';
@@ -62,7 +62,7 @@ export default [
 					index: g.index,
 					categories: g.categories.length,
 					isDefault: c.var.DBUser.mainGroupId === g.groupId,
-					accessLevel: getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId: g.groupId } }) || 'read',
+					accessLevel: getGroupAccessLevel(c.var.DBUser, g.groupId) || 'read',
 					sizeBytes: g.categories.reduce((acc, cat) => acc + cat.boards.reduce((boardAcc, board) => boardAcc + (board.totalSizeBytes || 0), 0), 0) || 0,
 				})),
 			});
@@ -134,8 +134,8 @@ export default [
 		handler: async (c) => {
 			const groupId = c.req.param('groupId');
 
-			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId } });
-			if (!accessLevel) return json(c, 403, { error: 'You do not have permission to view this group.' });
+			const accessLevel = getGroupAccessLevel(c.var.DBUser, groupId);
+			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this group.' });
 
 			const DBGroup = await db(manager, 'group', 'findUnique', {
 				where: c.var.isDev ? { groupId } : {
@@ -195,7 +195,7 @@ export default [
 						name: cat.name,
 						index: cat.index,
 						boards: cat.boards.length,
-						accessLevel: getAccessLevel(c.var.DBUser, { type: 'category', data: { categoryId: cat.categoryId, groupId } }) || 'read',
+						accessLevel: getCategoryAccessLevel(c.var.DBUser, cat.categoryId, groupId) || 'read',
 						totalSizeBytes: cat.boards.reduce((acc, board) => acc + board.totalSizeBytes, 0) || 0,
 					})),
 				},
@@ -215,7 +215,7 @@ export default [
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
 			const canEditGroup = canManage(c.var.DBUser, { type: 'global', data: null });
-			if (!canEditGroup) return json(c, 403, { error: 'You do not have permission to edit groups.' });
+			if (!canEditGroup) return json(c, 403, { error: 'You do not have permission to update this group.' });
 
 			const DBGroup = await db(manager, 'group', 'findUnique', { where: { groupId } });
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
@@ -236,7 +236,7 @@ export default [
 			const groupId = c.req.param('groupId');
 
 			const canDeleteGroup = canManage(c.var.DBUser, { type: 'global', data: null });
-			if (!canDeleteGroup) return json(c, 403, { error: 'You do not have permission to delete groups.' });
+			if (!canDeleteGroup) return json(c, 403, { error: 'You do not have permission to delete this group.' });
 
 			const DBGroup = await db(manager, 'group', 'findUnique', { where: { groupId }, include: { categories: true } });
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });

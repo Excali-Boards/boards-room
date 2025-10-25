@@ -1,5 +1,5 @@
+import { canManage, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel } from '../other/permissions.js';
 import { parseZodError, securityUtils } from '../modules/functions.js';
-import { getAccessLevel, canManage } from '../other/permissions.js';
 import { json, makeRoute } from '../services/routes.js';
 import config, { nameObject } from '../core/config.js';
 import { db } from '../core/prisma.js';
@@ -81,10 +81,10 @@ export default [
 			const categoryId = c.req.param('categoryId');
 			const groupId = c.req.param('groupId');
 
-			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
-			if (!accessLevel) return json(c, 403, { error: 'You do not have permission to view this category.' });
+			const accessLevel = getCategoryAccessLevel(c.var.DBUser, categoryId, groupId);
+			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this category.' });
 
-			const accessLevelGroup = getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId } });
+			const accessLevelGroup = getGroupAccessLevel(c.var.DBUser, groupId);
 
 			const DBCategory = await db(manager, 'category', 'findUnique', {
 				where: c.var.isDev ? { categoryId, groupId } : {
@@ -145,7 +145,7 @@ export default [
 						id: board.boardId,
 						name: board.name,
 						index: board.index,
-						accessLevel: getAccessLevel(c.var.DBUser, { type: 'board', data: { boardId: board.boardId, categoryId, groupId } }) || 'read',
+						accessLevel: getBoardAccessLevel(c.var.DBUser, board.boardId, categoryId, groupId) || 'read',
 						totalSizeBytes: board.totalSizeBytes,
 						hasFlashcards: board.flashcardDeck !== null,
 						scheduledForDeletion: board.scheduledForDeletion,

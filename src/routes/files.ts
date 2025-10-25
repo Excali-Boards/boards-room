@@ -1,5 +1,5 @@
 import { getBoardRoom, parseZodError } from '../modules/functions.js';
-import { hasAccessToBoard } from '../other/permissions.js';
+import { hasAccessToBoardWithIds } from '../other/permissions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { UploadFile } from '../types.js';
 import config from '../core/config.js';
@@ -20,7 +20,18 @@ export default [
 			const isValid = base64FileSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const access = await hasAccessToBoard(manager, c.var.DBUser, boardId);
+			const DBBoard = await db(manager, 'board', 'findUnique', {
+				where: { boardId },
+				select: {
+					type: true,
+					categoryId: true,
+					category: { select: { groupId: true } },
+				},
+			});
+
+			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+
+			const access = hasAccessToBoardWithIds(c.var.DBUser, boardId, DBBoard.categoryId, DBBoard.category.groupId);
 			if (!access.hasAccess || !access.canEdit) return json(c, 403, { error: 'You do not have permission to upload files to this board.' });
 
 			const binaryFiles = isValid.data.map((file) => {
@@ -31,9 +42,6 @@ export default [
 					mimeType: file.mimeType,
 				};
 			});
-
-			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId }, select: { type: true } });
-			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
 
 			const result = await manager.socket.handleFileAction(boardId, DBBoard.type, { action: 'add', files: binaryFiles });
 			if (typeof result === 'string') return json(c, 400, { error: result });
@@ -54,11 +62,20 @@ export default [
 			const formData = await c.req.formData().catch(() => null);
 			if (!formData) return json(c, 400, { error: 'Invalid form data.' });
 
-			const access = await hasAccessToBoard(manager, c.var.DBUser, boardId);
-			if (!access.hasAccess || !access.canEdit) return json(c, 403, { error: 'You do not have permission to upload files to this board.' });
+			const DBBoard = await db(manager, 'board', 'findUnique', {
+				where: { boardId },
+				select: {
+					boardId: true,
+					type: true,
+					categoryId: true,
+					category: { select: { groupId: true } },
+				},
+			});
 
-			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+
+			const access = hasAccessToBoardWithIds(c.var.DBUser, boardId, DBBoard.categoryId, DBBoard.category.groupId);
+			if (!access.hasAccess || !access.canEdit) return json(c, 403, { error: 'You do not have permission to upload files to this board.' });
 
 			const files: UploadFile[] = [];
 			const clientFileMapping: { file: File; clientId: string; }[] = [];
@@ -115,11 +132,20 @@ export default [
 			const isValid = fileDeleteSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const access = await hasAccessToBoard(manager, c.var.DBUser, boardId);
-			if (!access.hasAccess || !access.canEdit) return json(c, 403, { error: 'You do not have permission to delete files from this board.' });
+			const DBBoard = await db(manager, 'board', 'findUnique', {
+				where: { boardId },
+				select: {
+					boardId: true,
+					type: true,
+					categoryId: true,
+					category: { select: { groupId: true } },
+				},
+			});
 
-			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId } });
-			if (!DBBoard) return json(c, 404, { error: 'Board not found' });
+			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+
+			const access = hasAccessToBoardWithIds(c.var.DBUser, boardId, DBBoard.categoryId, DBBoard.category.groupId);
+			if (!access.hasAccess || !access.canEdit) return json(c, 403, { error: 'You do not have permission to delete files from this board.' });
 
 			const roomData = await getBoardRoom(manager, boardId, DBBoard.type);
 			if (!roomData) return json(c, 500, { error: 'Failed to get board room data.' });

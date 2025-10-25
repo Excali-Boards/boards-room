@@ -8,18 +8,21 @@ import config from '../core/config.js';
 import { db } from '../core/prisma.js';
 import crypto from 'crypto';
 
-// Permission hierarchy levels (higher number = more permissions)
+// This hierarchy represents CAPABILITY LEVELS, not role inheritance!
 export const PermissionHierarchy: Record<UserRole, number> = {
 	[BoardRole.BoardViewer]: 1,
 	[BoardRole.BoardCollaborator]: 2,
+
 	[CategoryRole.CategoryViewer]: 3,
 	[CategoryRole.CategoryCollaborator]: 4,
 	[CategoryRole.CategoryManager]: 5,
 	[CategoryRole.CategoryAdmin]: 6,
+
 	[GroupRole.GroupViewer]: 7,
 	[GroupRole.GroupCollaborator]: 8,
 	[GroupRole.GroupManager]: 9,
 	[GroupRole.GroupAdmin]: 10,
+
 	[GlobalRole.Developer]: 11,
 };
 
@@ -101,22 +104,43 @@ export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserParti
 
 	switch (resource.type) {
 		case 'board': {
-			if (PermissionHierarchy[role] >= PermissionHierarchy[BoardRole.BoardCollaborator]) return 'write';
-			if (PermissionHierarchy[role] >= PermissionHierarchy[BoardRole.BoardViewer]) return 'read';
+			if (role === BoardRole.BoardViewer) return 'read';
+			if (role === BoardRole.BoardCollaborator) return 'write';
+
+			if (role === CategoryRole.CategoryViewer) return 'read';
+			if (role === CategoryRole.CategoryCollaborator) return 'write';
+			if (role === CategoryRole.CategoryManager) return 'write';
+			if (role === CategoryRole.CategoryAdmin) return 'admin';
+
+			if (role === GroupRole.GroupViewer) return 'read';
+			if (role === GroupRole.GroupCollaborator) return 'write';
+			if (role === GroupRole.GroupManager) return 'write';
+			if (role === GroupRole.GroupAdmin) return 'admin';
+
+			if (role === GlobalRole.Developer) return 'admin';
 			break;
 		}
 		case 'category': {
-			if (PermissionHierarchy[role] >= PermissionHierarchy[CategoryRole.CategoryAdmin]) return 'admin';
-			if (PermissionHierarchy[role] >= PermissionHierarchy[CategoryRole.CategoryManager]) return 'manage';
-			if (PermissionHierarchy[role] >= PermissionHierarchy[CategoryRole.CategoryCollaborator]) return 'write';
-			if (PermissionHierarchy[role] >= PermissionHierarchy[CategoryRole.CategoryViewer]) return 'read';
+			if (role === CategoryRole.CategoryViewer) return 'read';
+			if (role === CategoryRole.CategoryCollaborator) return 'write';
+			if (role === CategoryRole.CategoryManager) return 'manage';
+			if (role === CategoryRole.CategoryAdmin) return 'admin';
+
+			if (role === GroupRole.GroupViewer) return 'read';
+			if (role === GroupRole.GroupCollaborator) return 'write';
+			if (role === GroupRole.GroupManager) return 'manage';
+			if (role === GroupRole.GroupAdmin) return 'admin';
+
+			if (role === GlobalRole.Developer) return 'admin';
 			break;
 		}
 		case 'group': {
-			if (PermissionHierarchy[role] >= PermissionHierarchy[GroupRole.GroupAdmin]) return 'admin';
-			if (PermissionHierarchy[role] >= PermissionHierarchy[GroupRole.GroupManager]) return 'manage';
-			if (PermissionHierarchy[role] >= PermissionHierarchy[GroupRole.GroupCollaborator]) return 'write';
-			if (PermissionHierarchy[role] >= PermissionHierarchy[GroupRole.GroupViewer]) return 'read';
+			if (role === GroupRole.GroupViewer) return 'read';
+			if (role === GroupRole.GroupCollaborator) return 'write';
+			if (role === GroupRole.GroupManager) return 'manage';
+			if (role === GroupRole.GroupAdmin) return 'admin';
+
+			if (role === GlobalRole.Developer) return 'admin';
 			break;
 		}
 	}
@@ -125,63 +149,30 @@ export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserParti
 }
 
 export function canView<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
-	const role = userHighestRole || getUserHighestRole(DBUser, resource);
-	if (!role) return false;
-
-	let targetPermission: UserRole | null = null;
-	switch (resource.type) {
-		case 'global': targetPermission = GlobalRole.Developer; break;
-		case 'board': targetPermission = BoardRole.BoardViewer; break;
-		case 'category': targetPermission = CategoryRole.CategoryViewer; break;
-		case 'group': targetPermission = GroupRole.GroupViewer; break;
-	}
-
-	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];
+	const accessLevel = getAccessLevel(DBUser, resource, userHighestRole);
+	return accessLevel !== null;
 }
 
 export function canEdit<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
-	const role = userHighestRole || getUserHighestRole(DBUser, resource);
-	if (!role) return false;
-
-	let targetPermission: UserRole | null = null;
-	switch (resource.type) {
-		case 'global': targetPermission = GlobalRole.Developer; break;
-		case 'board': targetPermission = BoardRole.BoardCollaborator; break;
-		case 'category': targetPermission = CategoryRole.CategoryCollaborator; break;
-		case 'group': targetPermission = GroupRole.GroupCollaborator; break;
-	}
-
-	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];
+	const accessLevel = getAccessLevel(DBUser, resource, userHighestRole);
+	return accessLevel === 'write' || accessLevel === 'manage' || accessLevel === 'admin';
 }
 
 export function canManage<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
-	const role = userHighestRole || getUserHighestRole(DBUser, resource);
-	if (!role) return false;
-
-	let targetPermission: UserRole | null = null;
-	switch (resource.type) {
-		case 'global': targetPermission = GlobalRole.Developer; break;
-		case 'board': targetPermission = CategoryRole.CategoryManager; break;
-		case 'category': targetPermission = GroupRole.GroupManager; break;
-		case 'group': targetPermission = GlobalRole.Developer; break;
-	}
-
-	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];
+	const accessLevel = getAccessLevel(DBUser, resource, userHighestRole);
+	return accessLevel === 'manage' || accessLevel === 'admin';
 }
 
 export function canManagePermissions<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
 	const role = userHighestRole || getUserHighestRole(DBUser, resource);
 	if (!role) return false;
 
-	let targetPermission: UserRole | null = null;
 	switch (resource.type) {
-		case 'global': targetPermission = GlobalRole.Developer; break;
-		case 'board': targetPermission = CategoryRole.CategoryAdmin; break;
-		case 'category': targetPermission = GroupRole.GroupAdmin; break;
-		case 'group': targetPermission = GlobalRole.Developer; break;
+		case 'global': return role === GlobalRole.Developer;
+		case 'board': return role === CategoryRole.CategoryAdmin || role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
+		case 'category': return role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
+		case 'group': return role === GlobalRole.Developer;
 	}
-
-	return PermissionHierarchy[role] >= PermissionHierarchy[targetPermission];
 }
 
 export function isValidRoleForResource(role: string, resourceType: ResourceType): boolean {
@@ -193,34 +184,49 @@ export function isValidRoleForResource(role: string, resourceType: ResourceType)
 	}
 }
 
-export async function hasAccessToBoard(manager: BoardsManager, DBUser: DBUserPartialType, boardId: string): Promise<{ hasAccess: boolean; canEdit: boolean; role?: UserRole }> {
-	if (isDeveloper(DBUser.email)) return { hasAccess: true, canEdit: true, role: GlobalRole.Developer };
-
-	const boardPerm = DBUser.boardPermissions.find((bp) => bp.boardId === boardId);
-	if (boardPerm) return {
-		hasAccess: true,
-		canEdit: boardPerm.role !== BoardRole.BoardViewer,
-		role: boardPerm.role,
+export function hasAccessToBoardWithIds(DBUser: DBUserPartialType, boardId: string, categoryId: string, groupId: string): { hasAccess: boolean; canEdit: boolean; role: UserRole | null; } {
+	const resource = {
+		type: 'board' as const,
+		data: { boardId, categoryId, groupId },
 	};
 
-	const board = await db(manager, 'board', 'findUnique', { where: { boardId }, include: { category: true } });
-	if (!board) return { hasAccess: false, canEdit: false };
+	const userRole = getUserHighestRole(DBUser, resource);
+	const hasAccess = canView(DBUser, resource, userRole || undefined);
+	const canEditBoard = canEdit(DBUser, resource, userRole || undefined);
 
-	const categoryPerm = DBUser.categoryPermissions.find((cp) => cp.categoryId === board.categoryId);
-	if (categoryPerm) return {
-		hasAccess: true,
-		canEdit: categoryPerm.role !== CategoryRole.CategoryViewer,
-		role: categoryPerm.role,
+	return {
+		hasAccess,
+		canEdit: canEditBoard,
+		role: userRole || null,
 	};
+}
 
-	const groupPerm = DBUser.groupPermissions.find((gp) => gp.groupId === board.category.groupId);
-	if (groupPerm) return {
-		hasAccess: true,
-		canEdit: groupPerm.role !== GroupRole.GroupViewer,
-		role: groupPerm.role,
-	};
+export function getBoardAccessLevel(DBUser: DBUserPartialType, boardId: string, categoryId: string, groupId: string): AccessLevel | null {
+	return getAccessLevel(DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
+}
 
-	return { hasAccess: false, canEdit: false };
+export function getCategoryAccessLevel(DBUser: DBUserPartialType, categoryId: string, groupId: string): AccessLevel | null {
+	return getAccessLevel(DBUser, { type: 'category', data: { categoryId, groupId } });
+}
+
+export function getGroupAccessLevel(DBUser: DBUserPartialType, groupId: string): AccessLevel | null {
+	return getAccessLevel(DBUser, { type: 'group', data: { groupId } });
+}
+
+export function canEditBoardWithIds(DBUser: DBUserPartialType, boardId: string, categoryId: string, groupId: string): boolean {
+	return canEdit(DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
+}
+
+export function canManageBoardWithIds(DBUser: DBUserPartialType, boardId: string, categoryId: string, groupId: string): boolean {
+	return canManage(DBUser, { type: 'board', data: { boardId, categoryId, groupId } });
+}
+
+export function canManageCategoryWithIds(DBUser: DBUserPartialType, categoryId: string, groupId: string): boolean {
+	return canManage(DBUser, { type: 'category', data: { categoryId, groupId } });
+}
+
+export function canManageGroupWithIds(DBUser: DBUserPartialType, groupId: string): boolean {
+	return canManage(DBUser, { type: 'group', data: { groupId } });
 }
 
 export function generateInviteCode(): string {

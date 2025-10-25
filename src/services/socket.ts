@@ -1,8 +1,8 @@
 import { ActionType, BareBoard, ClientToServerEvents, FileActionData, RoomData, ServerToClientEvents, SnapshotData } from '../types.js';
 import { getSceneVersion, isInitializedImageElement, newElementWith, reconcileElements } from '../other/excalidraw.js';
 import { DBUserPartial, DBUserPartialType } from '../other/vars.js';
+import { hasAccessToBoardWithIds } from '../other/permissions.js';
 import { performanceConstants } from '../core/constants.js';
-import { hasAccessToBoard } from '../other/permissions.js';
 import { compressionUtils } from '../modules/functions.js';
 import { RoomSnapshot, TLSocketRoom } from '@tldraw/sync';
 import { SocketId } from '@excalidraw/excalidraw/types';
@@ -70,10 +70,10 @@ export default class SocketServer {
 			const DBUser = await db(this.manager, 'user', 'findFirst', { where: { sessions: { some: { token } } }, ...DBUserPartial });
 			if (!DBUser) return socket.disconnect(true);
 
-			const DBBoard = await db(this.manager, 'board', 'findUnique', { where: { boardId: targetRoom }, select: { files: true, boardId: true, version: true, type: true } });
+			const DBBoard = await db(this.manager, 'board', 'findUnique', { where: { boardId: targetRoom }, select: { files: true, boardId: true, version: true, type: true, category: { select: { groupId: true } }, categoryId: true } });
 			if (!DBBoard) return socket.disconnect(true);
 
-			const access = await hasAccessToBoard(this.manager, DBUser, DBBoard.boardId);
+			const access = hasAccessToBoardWithIds(DBUser, DBBoard.boardId, DBBoard.categoryId, DBBoard.category.groupId);
 			if (!access.hasAccess) return socket.disconnect(true); const disconnectTimeout = setTimeout(() => {
 				socket.disconnect(true);
 				this.connectionTimes.delete(socket.id);
@@ -548,9 +548,6 @@ export class TldrawSocket {
 
 		socket.emit('init', { snapshot: null });
 
-		// socket.broadcast.to(DBBoard.boardId).emit('setCollaborators', Array.from(roomData.collaborators.values()));
-		// setTimeout(() => socket.emit('setCollaborators', Array.from(roomData.collaborators.values())), performanceConstants.socketConnectionTimeoutMs);
-
 		socket.on('disconnect', async () => {
 			clearTimeout(this.socket.connectionTimes.get(socket.id));
 			this.socket.manager.prometheus.updateSocketMetrics(this.socket.io.sockets.sockets.size - 1, this.roomData.size);
@@ -578,8 +575,6 @@ export class TldrawSocket {
 				this.roomData.delete(DBBoard.boardId);
 				this.socket.io.in(DBBoard.boardId).disconnectSockets();
 			}
-
-			// this.socket.io.to(DBBoard.boardId).emit('setCollaborators', Array.from(updatedRoom.collaborators.values()));
 		});
 	}
 

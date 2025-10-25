@@ -29,7 +29,6 @@ export const reconcileElements = (
 	const reconciledElements: ExcalidrawElement[] = [];
 	const added = new Set<string>();
 
-	// process remote elements
 	for (const remoteElement of remoteElements) {
 		if (!added.has(remoteElement.id)) {
 			const localElement = localElementsMap.get(remoteElement.id);
@@ -49,7 +48,6 @@ export const reconcileElements = (
 		}
 	}
 
-	// process remaining local elements
 	for (const localElement of localElements) {
 		if (!added.has(localElement.id)) {
 			reconciledElements.push(localElement);

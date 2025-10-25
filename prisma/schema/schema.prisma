@@ -30,24 +30,23 @@ enum BoardType {
     Tldraw
 }
 
-// Separate role enums for each resource type
 enum BoardRole {
-    BoardViewer // read-only to specific board
-    BoardCollaborator // BoardViewer + write to specific board
+    BoardViewer
+    BoardCollaborator
 }
 
 enum CategoryRole {
-    CategoryViewer // read-only to all boards in category
-    CategoryCollaborator // CategoryViewer + write to all boards in category
-    CategoryManager // CategoryCollaborator + create/delete boards in category
-    CategoryAdmin // CategoryManager + user/invite management
+    CategoryViewer
+    CategoryCollaborator
+    CategoryManager
+    CategoryAdmin
 }
 
 enum GroupRole {
-    GroupViewer // read-only to all categories and boards in group
-    GroupCollaborator // GroupViewer + write to all categories and boards in group
-    GroupManager // GroupCollaborator + create/delete categories and boards in group
-    GroupAdmin // GroupManager + user/invite management
+    GroupViewer
+    GroupCollaborator
+    GroupManager
+    GroupAdmin
 }
 
 model AllEnumsModel {
