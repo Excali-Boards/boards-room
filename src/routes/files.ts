@@ -47,7 +47,18 @@ export default [
 			if (typeof result === 'string') return json(c, 400, { error: result });
 			if (!result) return json(c, 500, { error: 'Failed to upload files.' });
 
-			return json(c, 200, { data: result });
+			const urlMappings = isValid.data.map((file) => ({
+				clientId: file.id,
+				serverId: file.id,
+				url: `${config.s3.endpoint}/${config.s3.bucket}/${boardId}/${file.id}`,
+			}));
+
+			return json(c, 200, {
+				data: {
+					...result,
+					files: urlMappings,
+				},
+			});
 		},
 	}),
 
