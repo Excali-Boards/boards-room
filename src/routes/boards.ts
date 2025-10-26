@@ -1,4 +1,4 @@
-import { isDeveloper, canManage, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel, canManageBoardWithIds } from '../other/permissions.js';
+import { isDeveloper, canManage, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel, canManageBoardWithIds, getUserHighestRole, PermissionHierarchy } from '../other/permissions.js';
 import { compressionUtils, parseZodError, securityUtils } from '../modules/functions.js';
 import config, { boardObject, nameObject } from '../core/config.js';
 import { json, makeRoute } from '../services/routes.js';
@@ -275,8 +275,8 @@ export default [
 			const groupId = c.req.param('groupId');
 			const categoryId = c.req.param('categoryId');
 
-			const accessLevel = getBoardAccessLevel(c.var.DBUser, boardId, categoryId, groupId);
-			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this board.' });
+			const canManage = canManageBoardWithIds(c.var.DBUser, boardId, categoryId, groupId);
+			if (!canManage) return json(c, 403, { error: 'You do not have access to this board.' });
 
 			const userId = c.req.query('userId');
 			if (!userId) return json(c, 400, { error: 'User ID is required.' });
@@ -296,14 +296,23 @@ export default [
 			if (targetIsSelf) return json(c, 400, { error: 'You cannot kick yourself from the room.' });
 
 			const targetIsDev = isDeveloper(TargetUser.email);
-			const isCurrentUserDev = c.var.isDev;
+			if (targetIsDev && !c.var.isDev) return json(c, 403, { error: 'You cannot kick a developer.' });
 
-			if (!isCurrentUserDev) {
-				if (targetIsDev) return json(c, 403, { error: 'You cannot kick a developer.' });
+			const resource = { type: 'board' as const, data: { boardId, categoryId, groupId } };
+			const currentUserRole = getUserHighestRole(c.var.DBUser, resource);
+			const targetUserRole = getUserHighestRole(TargetUser, resource);
 
-				const targetAccessLevel = getBoardAccessLevel(TargetUser, boardId, categoryId, groupId);
-				if (!targetAccessLevel) return json(c, 400, { error: 'The target user does not have access to this board.' });
-				else if (targetAccessLevel !== 'read') return json(c, 400, { error: 'The target user has more than read access to this board.' });
+			const targetAccessLevel = getBoardAccessLevel(TargetUser, boardId, categoryId, groupId);
+			if (!targetAccessLevel) return json(c, 400, { error: 'The target user does not have access to this board.' });
+
+			if (!c.var.isDev) {
+				if (!currentUserRole) return json(c, 403, { error: 'Insufficient role to kick users from this board.' });
+
+				const currentRank = PermissionHierarchy[currentUserRole] ?? 0;
+				const targetRank = targetUserRole ? (PermissionHierarchy[targetUserRole] ?? 0) : 0;
+
+				if (targetRank >= currentRank) return json(c, 403, { error: 'You cannot kick a user with the same or higher role than you.' });
+				if (targetAccessLevel !== 'read' && targetRank === 0) return json(c, 403, { error: 'You cannot kick a user who has more than read access to this board.' });
 			}
 
 			const kicked = await manager.socket[typeName].kickUser(boardId, userId);
