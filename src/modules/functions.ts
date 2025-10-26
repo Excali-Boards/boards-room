@@ -129,17 +129,7 @@ export const securityUtils = {
 	},
 
 	sanitizeInput: (input: string): string => {
-		return input.replace(/[<>&"'`]/g, (char) => {
-			switch (char) {
-				case '<': return '&lt;';
-				case '>': return '&gt;';
-				case '&': return '&amp;';
-				case '"': return '&quot;';
-				case "'": return '&#39;';
-				case '`': return '&#96;';
-				default: return char;
-			}
-		});
+		return input.replace(/[<>&"'`]/g, '');
 	},
 };
 
