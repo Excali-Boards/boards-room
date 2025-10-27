@@ -200,7 +200,9 @@ export class ExcalidrawSocket {
 			}
 		}
 
-		const compressed = compressionUtils.compressAndEncrypt(roomData.elements);
+		const compressed = compressionUtils.compressAndEncrypt(roomData.elements.map((el) => ({
+			...el, locked: true,
+		})));
 
 		const uploaded = await this.socket.manager.files.uploadBoardFile(boardId, compressed, 'application/octet-stream');
 		if (!uploaded) throw new Error(`Failed to upload board data for ${boardId}.`);
