@@ -56,12 +56,13 @@ export async function getCountryHolidays(countryCode: string, year: number): Pro
 	const holidays: HolidayEvent[] = response.data;
 
 	const formattedHolidays: FormattedHoliday[] = holidays.map((holiday) => {
-		const date = new Date(holiday.date);
+		const utcDate = new Date(`${holiday.date}T00:00:00Z`);
+
 		return {
 			id: `holiday-${holiday.countryCode}-${holiday.date}`,
 			title: holiday.localName || holiday.name,
-			start: date,
-			end: new Date(date.getTime() + 24 * 60 * 60 * 1000 - 1),
+			start: utcDate,
+			end: new Date(utcDate.getTime() + 24 * 60 * 60 * 1000 - 1),
 			color: getColorForHoliday(holiday.types),
 			description: `${holiday.name} (${holiday.countryCode})`,
 			types: holiday.types,
