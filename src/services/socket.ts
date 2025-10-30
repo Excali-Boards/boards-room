@@ -530,8 +530,6 @@ export class TldrawSocket {
 		socket.join(DBBoard.boardId);
 		this.roomData.set(DBBoard.boardId, roomData);
 
-		socket.emit('init', { snapshot: roomData.room.getCurrentSnapshot() });
-
 		socket.on('tldraw', (message) => {
 			roomData.room.handleSocketMessage(socket.id as SocketId, message);
 		});

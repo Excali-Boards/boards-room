@@ -1,8 +1,8 @@
 import { TSPrisma, BoardRole, CategoryRole, GroupRole, Invite as PrismaInvite, BoardType } from '@prisma/client';
 import { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import { SocketId, Collaborator } from '@excalidraw/excalidraw/types';
-import type { RoomSnapshot, TLSocketRoom } from '@tldraw/sync';
 import { DBUserPartialType } from './other/vars.js';
+import type { TLSocketRoom } from '@tldraw/sync';
 import { HttpBindings } from '@hono/node-server';
 import CustomMap from './modules/map.js';
 import { MiddlewareHandler } from 'hono';
@@ -227,7 +227,7 @@ export type RoomDataTldraw = {
 export type ClientData = {
 	elements: ExcalidrawElement[];
 } | {
-	snapshot: RoomSnapshot | null;
+	snapshot: null;
 };
 
 export type SceneBroadcastData = {
