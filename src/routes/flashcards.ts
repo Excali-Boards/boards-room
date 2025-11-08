@@ -72,8 +72,8 @@ export default [
 					data: {
 						cardId: securityUtils.randomString(12),
 						deckId: DBDeck.deckId,
-						front: securityUtils.sanitizeInput(card.front),
-						back: securityUtils.sanitizeInput(card.back),
+						front: card.front,
+						back: card.back,
 						index: maxIndex + 1 + i,
 					},
 					select: { cardId: true },
@@ -111,8 +111,8 @@ export default [
 				db(manager, 'flashcardCard', 'update', {
 					where: { cardId: card.id },
 					data: {
-						front: card.front ? securityUtils.sanitizeInput(card.front) : undefined,
-						back: card.back ? securityUtils.sanitizeInput(card.back) : undefined,
+						front: card.front ? card.front : undefined,
+						back: card.back ? card.back : undefined,
 					},
 					select: { cardId: true },
 				}),
@@ -235,8 +235,8 @@ export default [
 					data: {
 						cardId: securityUtils.randomString(12),
 						deckId: DBDeck.deckId,
-						front: securityUtils.sanitizeInput(card.front),
-						back: securityUtils.sanitizeInput(card.back),
+						front: card.front,
+						back: card.back,
 						index: i,
 					},
 					select: { cardId: true },
