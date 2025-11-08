@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypt
 import { PermissionHierarchy, ResourceRank } from '../other/permissions.js';
 import { BoardsManager } from '../index.js';
 import { BoardType } from '@prisma/client';
+import sanitizeHtml from 'sanitize-html';
 import config from '../core/config.js';
 import z, { ZodError } from 'zod';
 import _unfurl from 'unfurl.js';
@@ -129,7 +130,11 @@ export const securityUtils = {
 	},
 
 	sanitizeInput: (input: string): string => {
-		return input.replace(/[<>&"'`]/g, '');
+		return sanitizeHtml(input, {
+			allowedTags: [],
+			allowedAttributes: {},
+			disallowedTagsMode: 'discard',
+		});
 	},
 };
 
