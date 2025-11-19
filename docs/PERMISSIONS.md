@@ -45,8 +45,8 @@ If a user has a role on a resource:
 
 If a user has access to a resource:
 
-- **Board → Category**: A board-level user inherits equivalent visibility/access to its parent category.
-- **Category → Group**: A category-level user inherits equivalent visibility/access to its parent group.
+- **Board → Category**: A board-level user inherits view access to its parent category.
+- **Category → Group**: A category-level user inherits view access to its parent group.
 - Inherited access is **only for visibility/navigation**, not for managing or modifying the parent.
 
 ### 3. Fetching Rules
@@ -57,77 +57,6 @@ When fetching resources:
 - **Categories**: Only include categories the user has access to (directly or through a group).
 - **Groups**: Only include groups the user has access to.
 - **Developers**: See everything, unfiltered.
-
----
-
-## 🧩 Role Details
-
-### 🗂 Board Roles
-
-#### **BoardViewer**
-
-- Can view the assigned board.
-- Inherits view access to its parent category.
-- Cannot edit or manage permissions.
-
-#### **BoardCollaborator**
-
-- Can view and edit board content.
-- Inherits collaborator-level access to parent category.
-- Cannot manage permissions.
-
----
-
-### 📁 Category Roles
-
-#### **CategoryViewer**
-
-- Can view the category and all boards inside it.
-- Inherits view access to parent group.
-
-#### **CategoryCollaborator**
-
-- Can edit content within the category and its boards.
-- Inherits collaborator-level access to parent group.
-
-#### **CategoryManager**
-
-- Can create/delete boards, manage collaborators.
-- Inherits manager-level access to parent group.
-
-#### **CategoryAdmin**
-
-- Full control over the category and all boards.
-- Inherits admin-level access to parent group.
-
----
-
-### 🧭 Group Roles
-
-#### **GroupViewer**
-
-- Can view the group and all its categories and boards.
-
-#### **GroupCollaborator**
-
-- Can edit content within the group’s categories and boards.
-
-#### **GroupManager**
-
-- Can manage categories and collaborators within the group.
-
-#### **GroupAdmin**
-
-- Full administrative control of the group and everything under it.
-
----
-
-### 🌍 Global Role
-
-#### **Developer**
-
-- Full, unrestricted access to all resources.
-- Bypasses all filtering and inheritance.
 
 ---
 
