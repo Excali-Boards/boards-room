@@ -1,4 +1,4 @@
-import { TSPrisma, BoardRole, CategoryRole, GroupRole, Invite as PrismaInvite, BoardType } from '@prisma/client';
+import { TSPrisma, BoardRole, CategoryRole, GroupRole, Invite as PrismaInvite, BoardType, Board as PrismaBoard, File } from '@prisma/client';
 import { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import { SocketId, Collaborator } from '@excalidraw/excalidraw/types';
 import { DBUserPartialType } from './other/vars.js';
@@ -41,6 +41,10 @@ export type User = TSPrisma.TSPrismaModelsFull['User'];
 export type Group = TSPrisma.TSPrismaModelsFull['Group'];
 export type Category = TSPrisma.TSPrismaModelsFull['Category'];
 export type Board = TSPrisma.TSPrismaModelsFull['Board'];
+
+export type BoardWithFiles = PrismaBoard & {
+	files: File[];
+};
 
 // Permission models
 export type GroupPermission = TSPrisma.TSPrismaModelsFull['GroupPermission'];

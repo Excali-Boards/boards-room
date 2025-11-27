@@ -217,8 +217,14 @@ export default [
 			const force = c.req.query('force') === 'true';
 			if (force && !c.var.isDev) return json(c, 403, { error: 'Only developers can force delete boards.' });
 
-			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
+			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } }, include: { files: true } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+
+			if (force) {
+				const deletedBoard = await manager.utils.deleteBoard(DBBoard);
+				if (!deletedBoard) return json(c, 500, { error: 'Failed to delete board.' });
+				return json(c, 200, { data: 'Board deleted successfully.' });
+			}
 
 			const scheduledForDeletion = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
 
