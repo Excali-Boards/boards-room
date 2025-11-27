@@ -97,7 +97,7 @@ export default [
 
 					files.push({
 						id: clientId,
-						data: value,
+						data: await value.arrayBuffer(),
 						mimeType: value.type || 'application/octet-stream',
 					});
 

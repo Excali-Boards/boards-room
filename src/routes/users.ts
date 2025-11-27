@@ -1,7 +1,7 @@
 import { parseZodError } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { allowedPlatforms } from '../core/config.js';
-import { Platforms } from '@prisma/client';
+import { Platforms, User } from '@prisma/client';
 import { db } from '../core/prisma.js';
 import manager from '../index.js';
 import { z } from 'zod';
@@ -32,28 +32,31 @@ export default [
 			const isValid = userSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
+			const updateData: Partial<User> = {};
+
+			if (isValid.data.displayName) updateData.displayName = isValid.data.displayName;
+
 			if (isValid.data.platform) {
 				if (!allowedPlatforms.includes(isValid.data.platform.toLowerCase() as Lowercase<Platforms>)) return json(c, 400, { error: 'Invalid platform.' });
 
 				const platformInfo = c.var.DBUser.loginMethods.find((method) => method.platform === isValid.data.platform);
 				if (!platformInfo) return json(c, 400, { error: 'You must connect to the platform you want to set as main first.' });
 
-				await db(manager, 'user', 'update', {
-					where: { userId: c.var.DBUser.userId },
-					data: {
-						email: platformInfo.platformEmail,
-						mainLoginType: isValid.data.platform,
-					},
-				}, false);
+				updateData.email = platformInfo.platformEmail;
+				updateData.mainLoginType = isValid.data.platform;
 			}
 
 			if (isValid.data.mainGroupId !== undefined) {
 				const DBGroup = isValid.data.mainGroupId ? await db(manager, 'group', 'findUnique', { where: { groupId: isValid.data.mainGroupId } }) : null;
 				if (isValid.data.mainGroupId && !DBGroup) return json(c, 404, { error: 'Group not found.' });
 
+				updateData.mainGroupId = isValid.data.mainGroupId;
+			}
+
+			if (Object.keys(updateData).length > 0) {
 				await db(manager, 'user', 'update', {
 					where: { userId: c.var.DBUser.userId },
-					data: { mainGroupId: isValid.data.mainGroupId },
+					data: updateData,
 				});
 			}
 
@@ -94,4 +97,5 @@ export type UserInput = z.infer<typeof userSchema>;
 export const userSchema = z.object({
 	platform: z.enum(Platforms).optional(),
 	mainGroupId: z.string().optional().nullable(),
+	displayName: z.string().min(3).max(40).optional(),
 });
