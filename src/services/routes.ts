@@ -1,19 +1,19 @@
 import { HonoEnv, RouteType, StatusWebCode, StatusWebResponse } from '../types.js';
 import { securityUtils, toLowercase } from '../modules/functions.js';
-import { getConnInfo } from '@hono/node-server/conninfo';
 import { securityConstants } from '../core/constants.js';
-import { Context, MiddlewareHandler } from 'hono';
+import { getConnInfo } from '@hono/node-server/conninfo';
 import { DBUserSelectArgs } from '../other/vars.js';
+import { Context, MiddlewareHandler } from 'hono';
 import LoggerModule from '../modules/logger.js';
+import { BoardsManager } from '../index.js';
 import { readdirSync, statSync } from 'fs';
 import { compress } from 'hono/compress';
-import { BoardsManager } from '../index.js';
-import { routePath } from 'hono/route';
 import config from '../core/config.js';
+import { routePath } from 'hono/route';
 import { db } from '../core/prisma.js';
+import { fileURLToPath } from 'url';
 import { cors } from 'hono/cors';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,7 +96,13 @@ export default class Routes {
 		});
 
 		const methodType = toLowercase(route.method);
-		this.manager.hono[methodType](route.path, ...handlers);
+		if (Array.isArray(route.path)) {
+			for (const p of route.path) {
+				this.manager.hono[methodType](p, ...handlers);
+			}
+		} else {
+			this.manager.hono[methodType](route.path, ...handlers);
+		}
 	}
 
 	public async loadRoutes(dir: string = this.routesPath): Promise<void> {

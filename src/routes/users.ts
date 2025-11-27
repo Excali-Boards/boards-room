@@ -1,5 +1,6 @@
 import { parseZodError } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
+import { DBUserSelectArgs } from 'src/other/vars.js';
 import { allowedPlatforms } from '../core/config.js';
 import { Platforms, User } from '@prisma/client';
 import { db } from '../core/prisma.js';
@@ -7,6 +8,7 @@ import manager from '../index.js';
 import { z } from 'zod';
 
 export default [
+	// Current user.
 	makeRoute({
 		path: '/users',
 		method: 'GET',
@@ -32,33 +34,8 @@ export default [
 			const isValid = userSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const updateData: Partial<User> = {};
-
-			if (isValid.data.displayName) updateData.displayName = isValid.data.displayName;
-
-			if (isValid.data.platform) {
-				if (!allowedPlatforms.includes(isValid.data.platform.toLowerCase() as Lowercase<Platforms>)) return json(c, 400, { error: 'Invalid platform.' });
-
-				const platformInfo = c.var.DBUser.loginMethods.find((method) => method.platform === isValid.data.platform);
-				if (!platformInfo) return json(c, 400, { error: 'You must connect to the platform you want to set as main first.' });
-
-				updateData.email = platformInfo.platformEmail;
-				updateData.mainLoginType = isValid.data.platform;
-			}
-
-			if (isValid.data.mainGroupId !== undefined) {
-				const DBGroup = isValid.data.mainGroupId ? await db(manager, 'group', 'findUnique', { where: { groupId: isValid.data.mainGroupId } }) : null;
-				if (isValid.data.mainGroupId && !DBGroup) return json(c, 404, { error: 'Group not found.' });
-
-				updateData.mainGroupId = isValid.data.mainGroupId;
-			}
-
-			if (Object.keys(updateData).length > 0) {
-				await db(manager, 'user', 'update', {
-					where: { userId: c.var.DBUser.userId },
-					data: updateData,
-				});
-			}
+			const tryUpdate = await updateUserInfo(c.var.DBUser.userId, isValid.data).catch((err) => err);
+			if (tryUpdate instanceof Error) return json(c, 400, { error: tryUpdate.message });
 
 			return json(c, 200, { data: 'User updated successfully.' });
 		},
@@ -70,29 +47,132 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			await db(manager, 'user', 'delete', { where: { userId: c.var.DBUser.userId } });
-
-			const allRooms = [
-				...manager.socket.excalidrawSocket.roomData.values(),
-				...manager.socket.tldrawSocket.roomData.values(),
-			];
-
-			for (const room of allRooms) {
-				for (const [socketId, collaborator] of room.collaborators) {
-					if (collaborator.id === c.var.DBUser.userId) {
-						room.collaborators.delete(socketId);
-
-						const socket = manager.socket.io.sockets.sockets.get(socketId);
-						if (socket) socket.disconnect(true);
-					}
-				}
-			}
+			const tryDelete = await deleteUser(c.var.DBUser.userId).catch((err) => err);
+			if (tryDelete instanceof Error) return json(c, 400, { error: tryDelete.message });
 
 			return json(c, 200, { data: 'Your account has been deleted.' });
 		},
 	}),
+
+	// Other users.
+	makeRoute({
+		path: '/users/:userId',
+		method: 'GET',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			const userId = c.req.param('userId');
+			if (!c.var.isDev && userId !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to access this user\'s information.' });
+
+			const DBUser = await getUserInfo(userId);
+			if (!DBUser) return json(c, 404, { error: 'User not found.' });
+
+			return json(c, 200, { data: DBUser });
+		},
+	}),
+	makeRoute({
+		path: '/users/:userId',
+		method: 'PATCH',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			const userId = c.req.param('userId');
+			if (!c.var.isDev && userId !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to update this user.' });
+
+			const isValid = userSchema.safeParse(await c.req.json().catch(() => ({})));
+			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
+
+			const tryUpdate = await updateUserInfo(userId, isValid.data).catch((err) => err);
+			if (tryUpdate instanceof Error) return json(c, 400, { error: tryUpdate.message });
+
+			return json(c, 200, { data: 'User updated successfully.' });
+		},
+	}),
+	makeRoute({
+		path: '/users/:userId',
+		method: 'DELETE',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			const userId = c.req.param('userId');
+			if (!c.var.isDev && userId !== c.var.DBUser.userId) return json(c, 403, { error: 'You do not have permission to delete this user.' });
+
+			const tryDelete = await deleteUser(userId).catch((err) => err);
+			if (tryDelete instanceof Error) return json(c, 400, { error: tryDelete.message });
+
+			return json(c, 200, { data: 'User deleted successfully.' });
+		},
+	}),
 ];
 
+// Functions.
+export async function getUserInfo(userId: string) {
+	return await db(manager, 'user', 'findUnique', {
+		where: { userId },
+		...DBUserSelectArgs,
+	});
+}
+
+export async function updateUserInfo(userId: string, data: Partial<UserInput>) {
+	const updateData: Partial<User> = {};
+
+	if (data.displayName) updateData.displayName = data.displayName;
+
+	if (data.platform) {
+		if (!allowedPlatforms.includes(data.platform.toLowerCase() as Lowercase<Platforms>)) throw new Error('Invalid platform.');
+
+		const DBUser = await db(manager, 'user', 'findUnique', {
+			where: { userId },
+			select: { loginMethods: true },
+		});
+		if (!DBUser) throw new Error('User not found.');
+
+		const platformInfo = DBUser.loginMethods.find((method) => method.platform === data.platform);
+		if (!platformInfo) throw new Error('You must connect to the platform you want to set as main first.');
+
+		updateData.email = platformInfo.platformEmail;
+		updateData.mainLoginType = data.platform;
+	}
+
+	if (data.mainGroupId !== undefined) {
+		const DBGroup = data.mainGroupId ? await db(manager, 'group', 'findUnique', { where: { groupId: data.mainGroupId } }) : null;
+		if (data.mainGroupId && !DBGroup) throw new Error('Group not found.');
+
+		updateData.mainGroupId = data.mainGroupId;
+	}
+
+	if (Object.keys(updateData).length > 0) {
+		await db(manager, 'user', 'update', {
+			where: { userId },
+			data: updateData,
+		});
+	}
+}
+
+export async function deleteUser(userId: string) {
+	await db(manager, 'user', 'delete', { where: { userId } });
+
+	const allRooms = [
+		...manager.socket.excalidrawSocket.roomData.values(),
+		...manager.socket.tldrawSocket.roomData.values(),
+	];
+
+	for (const room of allRooms) {
+		for (const [socketId, collaborator] of room.collaborators) {
+			if (collaborator.id === userId) {
+				room.collaborators.delete(socketId);
+
+				const socket = manager.socket.io.sockets.sockets.get(socketId);
+				if (socket) socket.disconnect(true);
+			}
+		}
+	}
+}
+
+// Schema.
 export type UserInput = z.infer<typeof userSchema>;
 export const userSchema = z.object({
 	platform: z.enum(Platforms).optional(),

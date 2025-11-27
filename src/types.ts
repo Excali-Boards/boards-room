@@ -194,7 +194,7 @@ export type RouteType<
 	Path extends `/${string}` = `/${string}`,
 	Auth extends boolean = false,
 > = {
-	path: Path;
+	path: Path | Path[];
 	method: RouteMethod;
 
 	enabled: boolean;
