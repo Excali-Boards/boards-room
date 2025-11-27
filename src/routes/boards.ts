@@ -214,6 +214,9 @@ export default [
 			const canDeleteBoard = canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 			if (!canDeleteBoard) return json(c, 403, { error: 'You do not have permission to delete this board.' });
 
+			const force = c.req.query('force') === 'true';
+			if (force && !c.var.isDev) return json(c, 403, { error: 'Only developers can force delete boards.' });
+
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
 
