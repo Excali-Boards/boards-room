@@ -1,6 +1,6 @@
 import { emailToUserId, parseZodError, securityUtils } from '../modules/functions.js';
+import { Device, Platforms, RegistrationMethod } from '@prisma/client';
 import { makeRoute, json } from '../services/routes.js';
-import { Device, Platforms } from '@prisma/client';
 import config from '../core/config.js';
 import { db } from '../core/prisma.js';
 import manager from '../index.js';
@@ -178,6 +178,7 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 			mainLoginType: platform,
 			displayName,
 			avatarUrl,
+			registrationMethod: RegistrationMethod.oauth,
 			loginMethods: {
 				create: { platform, platformEmail: encryptedEmail },
 			},

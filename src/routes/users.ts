@@ -1,7 +1,7 @@
 import { parseZodError } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
-import { DBUserSelectArgs } from '../other/vars.js';
 import { allowedPlatforms } from '../core/config.js';
+import { DBUserSelectArgs } from '../other/vars.js';
 import { Platforms, User } from '@prisma/client';
 import { db } from '../core/prisma.js';
 import manager from '../index.js';

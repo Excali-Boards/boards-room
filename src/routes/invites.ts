@@ -238,9 +238,18 @@ export default [
 			}
 
 			await applyPermissionGrants(manager, permissionResult, DBInvite.createdBy, userId);
-			await db(manager, 'invite', 'update', { where: { dbId: DBInvite.dbId }, data: { currentUses: { increment: 1 } } }).catch(() => null);
 
-			const allGrantedPermissions = [
+			if (c.var.DBUser.registrationMethod === 'direct' || !c.var.DBUser.invitedBy) {
+				await db(manager, 'user', 'update', {
+					where: { userId },
+					data: {
+						registrationMethod: 'invite',
+						invitedBy: DBInvite.createdBy,
+					},
+				}).catch(() => null);
+			}
+
+			await db(manager, 'invite', 'update', { where: { dbId: DBInvite.dbId }, data: { currentUses: { increment: 1 } } }).catch(() => null); const allGrantedPermissions = [
 				...permissionResult.newPermissions,
 				...permissionResult.updatedPermissions.map((update) => ({ type: update.type, resourceId: update.resourceId, role: update.role })),
 			];

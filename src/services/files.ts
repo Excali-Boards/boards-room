@@ -1,8 +1,8 @@
 import { DeleteObjectCommand, DeleteObjectCommandOutput, GetObjectCommand, GetObjectCommandOutput, HeadObjectCommand, HeadObjectCommandOutput, ListObjectsV2Command, ListObjectsV2Output, PutObjectCommand, PutObjectCommandOutput, S3Client } from '@aws-sdk/client-s3';
 import { UploadFile, WebResponse } from '../types.js';
 import { BoardsManager } from '../index.js';
-import { Readable } from 'node:stream';
 import config from '../core/config.js';
+import { Readable } from 'node:stream';
 import { db } from '../core/prisma.js';
 
 class BaseFiles {
