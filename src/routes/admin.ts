@@ -77,7 +77,7 @@ export default [
 
 			return json(c, 200, {
 				data: {
-					users: DBUsers.map((user) => ({
+					data: DBUsers.map((user) => ({
 						...user,
 						isDev: isDeveloper(user.email),
 					})),

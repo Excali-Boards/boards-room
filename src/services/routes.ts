@@ -1,4 +1,4 @@
-import { HonoEnv, RouteType, StatusWebCode, StatusWebResponse } from '../types.js';
+import { HonoEnv, RouteType, StatusWebCode, WebResponse } from '../types.js';
 import { securityUtils, toLowercase } from '../modules/functions.js';
 import { securityConstants } from '../core/constants.js';
 import { getConnInfo } from '@hono/node-server/conninfo';
@@ -240,12 +240,8 @@ export default class Routes {
 }
 
 // Utility functions.
-export function json<T, S extends StatusWebCode>(c: Context, status: S, data: Omit<StatusWebResponse<T, S>, 'status'>) {
+export function json<T, S extends StatusWebCode>(c: Context, status: S, data: Omit<WebResponse<T, S>, 'status'>) {
 	return c.json({ status, ...data }, status);
-}
-
-export function text<S extends StatusWebCode>(c: Context, status: S, data: string) {
-	return c.text(data, status);
 }
 
 export function makeRoute<

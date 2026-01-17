@@ -7,15 +7,17 @@ import { HttpBindings } from '@hono/node-server';
 import CustomMap from './modules/map.js';
 import { MiddlewareHandler } from 'hono';
 
-export type WebResponse<T> = {
-	status: 200;
-	data: T;
-} | {
-	status: 400 | 401 | 403 | 404 | 500 | 503;
-	error: unknown;
-}
+export type StatusWebCode = 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 503;
+export type WebResponse<T, S extends StatusWebCode> =
+	S extends 200 ? {
+		status: S;
+		data: T;
+	} : {
+		status: S;
+		error: string;
+	};
 
-export type CancelOutWebResponses<T extends WebResponse<unknown>> = T extends { status: 200, data: infer U } ? U : never;
+export type CancelOutWebResponses<T extends WebResponse<unknown, StatusWebCode>> = T extends { status: 200, data: infer U } ? U : never;
 export type NonUndefined<T> = T extends undefined ? never : T;
 
 export type Simplify<T> = {
@@ -168,17 +170,6 @@ export type UploadFile = {
 };
 
 // Routes.
-export type StatusWebCode = 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 503;
-export type StatusWebResponse<T, S extends StatusWebCode> =
-	S extends 200 ? {
-		status: S;
-		data: T;
-	} : {
-		status: S;
-		error: unknown;
-		retryAfter?: number;
-	};
-
 export type HonoEnv<Auth extends boolean = boolean> = {
 	Bindings: HttpBindings;
 	Variables: {
