@@ -47,15 +47,10 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const userId = c.req.query('userId') || c.var.DBUser.userId;
-			const isMyself = userId === c.var.DBUser.userId;
-
-			if (!c.var.isDev && !isMyself) return json(c, 403, { error: 'You do not have permission to delete this user.' });
-
-			const tryDelete = await deleteUser(userId).catch((err) => err);
+			const tryDelete = await deleteUser(c.var.DBUser.userId).catch((err) => err);
 			if (tryDelete instanceof Error) return json(c, 400, { error: tryDelete.message });
 
-			return json(c, 200, { data: isMyself ? 'Your account has been deleted successfully.' : 'User deleted successfully.' });
+			return json(c, 200, { data: 'User deleted successfully.' });
 		},
 	}),
 
