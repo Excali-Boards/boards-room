@@ -62,8 +62,13 @@ export function decompressJSON<T>(compressed: Buffer): T {
 
 const cryptoOptions = {
 	authTagLength: 16,
-	key: createHash('sha256').update(config.apiToken).digest(),
 	iv: Buffer.alloc(12, 0),
+
+	get key() {
+		const key = createHash('sha256').update(config.apiToken).digest();
+		Object.defineProperty(this, 'key', { value: key });
+		return key;
+	},
 };
 
 export const compressionUtils = {
