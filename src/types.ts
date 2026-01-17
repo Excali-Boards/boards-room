@@ -8,13 +8,13 @@ import CustomMap from './modules/map.js';
 import { MiddlewareHandler } from 'hono';
 
 export type StatusWebCode = 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 503;
-export type WebResponse<T, S extends StatusWebCode> =
+export type WebResponse<T, S extends StatusWebCode = StatusWebCode> =
 	S extends 200 ? {
 		status: S;
 		data: T;
 	} : {
 		status: S;
-		error: string;
+		error: string | string[];
 	};
 
 export type CancelOutWebResponses<T extends WebResponse<unknown, StatusWebCode>> = T extends { status: 200, data: infer U } ? U : never;

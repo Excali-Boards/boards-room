@@ -240,6 +240,10 @@ export default class Routes {
 }
 
 // Utility functions.
+export function text<S extends StatusWebCode>(c: Context, status: S, data: string) {
+	return c.text(data, status);
+}
+
 export function json<T, S extends StatusWebCode>(c: Context, status: S, data: Omit<WebResponse<T, S>, 'status'>) {
 	return c.json({ status, ...data }, status);
 }
