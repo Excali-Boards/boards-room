@@ -12,6 +12,8 @@ model GroupPermission {
     user  User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
     @@unique([groupId, userId])
+    @@index([userId])
+    @@index([groupId])
 }
 
 model CategoryPermission {
@@ -28,6 +30,8 @@ model CategoryPermission {
     user     User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
     @@unique([categoryId, userId])
+    @@index([userId])
+    @@index([categoryId])
 }
 
 model BoardPermission {
@@ -44,6 +48,8 @@ model BoardPermission {
     user  User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
     @@unique([boardId, userId])
+    @@index([userId])
+    @@index([boardId])
 }
 
 model Invite {

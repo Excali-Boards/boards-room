@@ -21,6 +21,21 @@ const config = {
 		secretKey: process.env.S3_SECRET_KEY!,
 		bucket: process.env.S3_BUCKET!,
 	},
+
+	valkey: {
+		host: process.env.CACHE_HOST || 'localhost',
+		port: process.env.CACHE_PORT ? parseInt(process.env.CACHE_PORT, 10) : 6379,
+		password: process.env.CACHE_PASSWORD || null,
+		db: process.env.CACHE_DB ? parseInt(process.env.CACHE_DB, 10) : 0,
+
+		enabled: process.env.CACHE_ENABLED === 'true',
+		defaultTtl: process.env.CACHE_DEFAULT_TTL ? parseInt(process.env.CACHE_DEFAULT_TTL, 10) : 300,
+	},
+
+	database: {
+		poolMin: process.env.DB_POOL_MIN ? parseInt(process.env.DB_POOL_MIN, 10) : 2,
+		poolMax: process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : 10,
+	},
 } satisfies z.infer<typeof ConfigSchema>;
 
 const ConfigSchema = z.object({
@@ -38,6 +53,21 @@ const ConfigSchema = z.object({
 		accessKey: z.string(),
 		secretKey: z.string(),
 		bucket: z.string(),
+	}),
+
+	valkey: z.object({
+		host: z.string(),
+		port: z.number().int().min(1).max(65535),
+		password: z.string().nullable(),
+		db: z.number().int().min(0).max(15),
+
+		enabled: z.boolean(),
+		defaultTtl: z.number().int().min(1),
+	}),
+
+	database: z.object({
+		poolMin: z.number().int().min(1).max(100),
+		poolMax: z.number().int().min(1).max(100),
 	}),
 });
 

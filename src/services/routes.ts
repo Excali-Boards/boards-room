@@ -154,7 +154,7 @@ export default class Routes {
 
 			const session = await db(this.manager, 'session', 'findUnique', {
 				where: { token: authHeader },
-				include: { user: true },
+				include: { user: { ...DBUserSelectArgs } },
 			});
 
 			if (!session || session.expiresAt < new Date()) {
@@ -162,35 +162,25 @@ export default class Routes {
 				return json(c, 401, { error: 'Unauthorized.' });
 			}
 
+			const updateData: { lastUsed?: Date; expiresAt?: Date; } = {};
 			if (session.lastUsed.getTime() < Date.now() - 15 * 60 * 1000) { // 15 minutes
-				await db(this.manager, 'session', 'update', {
-					where: { token: authHeader },
-					data: { lastUsed: new Date() },
-				});
+				updateData.lastUsed = new Date();
 			}
 
 			// If the session is set to expire in less than 24 hours.
 			if (session.expiresAt.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
-				await db(this.manager, 'session', 'update', {
-					where: { token: authHeader },
-					data: {
-						expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-					},
-				});
+				updateData.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 			}
 
-			const DBUser = await db(this.manager, 'user', 'findUnique', {
-				where: { userId: session.userId },
-				...DBUserSelectArgs,
-			});
+			if (Object.keys(updateData).length > 0) {
+				db(this.manager, 'session', 'update', { where: { token: authHeader }, data: updateData }).catch(() => null);
+			}
 
-			if (!DBUser) return json(c, 401, { error: 'Unauthorized.' });
-
-			const isDev = config.developers.includes(securityUtils.decrypt(DBUser.email));
+			const isDev = config.developers.includes(securityUtils.decrypt(session.user.email));
 			if (route.devOnly && !isDev) return json(c, 401, { error: 'You do not have permission to access this route.' });
 
 			c.set('token', session.token);
-			c.set('DBUser', DBUser);
+			c.set('DBUser', session.user);
 			c.set('isDev', isDev);
 
 			return next();

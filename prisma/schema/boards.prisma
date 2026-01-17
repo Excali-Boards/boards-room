@@ -10,6 +10,8 @@ model Group {
 
     categories  Category[]
     permissions GroupPermission[]
+
+    @@index([index])
 }
 
 model Category {
@@ -24,6 +26,9 @@ model Category {
 
     boards      Board[]
     permissions CategoryPermission[]
+
+    @@index([groupId])
+    @@index([index])
 }
 
 model Board {
@@ -47,6 +52,9 @@ model Board {
 
     files           File[]
     boardPermission BoardPermission[]
+
+    @@index([categoryId])
+    @@index([index])
 }
 
 model File {
@@ -59,4 +67,6 @@ model File {
 
     boardId String
     board   Board  @relation(fields: [boardId], references: [boardId], onDelete: Cascade)
+
+    @@index([boardId])
 }

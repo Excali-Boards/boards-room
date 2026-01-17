@@ -47,10 +47,15 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const tryDelete = await deleteUser(c.var.DBUser.userId).catch((err) => err);
+			const userId = c.req.query('userId') || c.var.DBUser.userId;
+			const isMyself = userId === c.var.DBUser.userId;
+
+			if (!c.var.isDev && !isMyself) return json(c, 403, { error: 'You do not have permission to delete this user.' });
+
+			const tryDelete = await deleteUser(userId).catch((err) => err);
 			if (tryDelete instanceof Error) return json(c, 400, { error: tryDelete.message });
 
-			return json(c, 200, { data: 'Your account has been deleted.' });
+			return json(c, 200, { data: isMyself ? 'Your account has been deleted successfully.' : 'User deleted successfully.' });
 		},
 	}),
 
@@ -153,6 +158,9 @@ export async function updateUserInfo(userId: string, data: Partial<UserInput>) {
 }
 
 export async function deleteUser(userId: string) {
+	const isValidUser = await db(manager, 'user', 'findUnique', { where: { userId } });
+	if (!isValidUser) throw new Error('User not found.');
+
 	await db(manager, 'user', 'delete', { where: { userId } });
 
 	const allRooms = [

@@ -1,10 +1,11 @@
+import Utils, { buildDatabaseUrl } from './modules/utils.js';
 import PrometheusMetrics from './modules/metrics.js';
-import { PrismaClient } from '@prisma/client';
 import SocketServer from './services/socket.js';
 import LoggerModule from './modules/logger.js';
+import { PrismaClient } from '@prisma/client';
+import CacheService from './core/cache.js';
 import Routes from './services/routes.js';
 import Files from './services/files.js';
-import Utils from './modules/utils.js';
 import { HonoEnv } from './types.js';
 import { Hono } from 'hono';
 
@@ -14,10 +15,13 @@ console.clear();
 
 export class BoardsManager {
 	public hono = new Hono<HonoEnv>();
-	public prisma = new PrismaClient();
+	public prisma = new PrismaClient({
+		datasources: { db: { url: buildDatabaseUrl() } },
+	});
 
 	public prometheus = new PrometheusMetrics(this);
 	public socket = new SocketServer(this);
+	public cache = new CacheService(this);
 	public routes = new Routes(this);
 	public utils = new Utils(this);
 	public files = new Files(this);
@@ -28,6 +32,7 @@ export class BoardsManager {
 
 	public async init() {
 		await this.initPrisma();
+		await this.cache.init();
 
 		await this.routes.init();
 		await this.socket.init();
@@ -47,9 +52,10 @@ export default manager;
 
 export async function shutdown() {
 	await manager.socket.saveAllBoards();
+	await manager.cache.disconnect();
 	await manager.prisma.$disconnect();
 
-	LoggerModule('Shutdown', 'All data has been saved and Prisma is disconnected.', 'cyan');
+	LoggerModule('Shutdown', 'All data saved and connections closed.', 'cyan');
 	process.exit(0);
 }
 

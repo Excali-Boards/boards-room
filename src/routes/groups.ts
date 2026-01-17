@@ -1,4 +1,4 @@
-import { canManage, getGroupAccessLevel, getCategoryAccessLevel } from '../other/permissions.js';
+import { canManage, getGroupAccessLevel, getCategoryAccessLevel, getUserHighestRole } from '../other/permissions.js';
 import { parseZodError, securityUtils } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { nameObject } from '../core/config.js';
@@ -54,6 +54,12 @@ export default [
 					},
 				},
 			}) || [];
+
+			const groupRoles = new Map();
+			for (const g of DBGroups) {
+				const role = getUserHighestRole(c.var.DBUser, { type: 'group', data: { groupId: g.groupId } });
+				groupRoles.set(g.groupId, role);
+			}
 
 			return json(c, 200, {
 				data: DBGroups.sort((a, b) => a.index - b.index).map((g) => ({
@@ -181,6 +187,12 @@ export default [
 			});
 
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
+
+			const categoryRoles = new Map();
+			for (const cat of DBGroup.categories) {
+				const role = getUserHighestRole(c.var.DBUser, { type: 'category', data: { categoryId: cat.categoryId, groupId } });
+				categoryRoles.set(cat.categoryId, role);
+			}
 
 			return json(c, 200, {
 				data: {

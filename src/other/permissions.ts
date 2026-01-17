@@ -8,6 +8,8 @@ import config from '../core/config.js';
 import { db } from '../core/prisma.js';
 import crypto from 'crypto';
 
+const developerCache = new Map<string, boolean>();
+
 // This hierarchy represents CAPABILITY LEVELS, not role inheritance!
 export const PermissionHierarchy: Record<UserRole, number> = {
 	[BoardRole.BoardViewer]: 1,
@@ -33,7 +35,11 @@ export const ResourceRank: Record<ResourceType, number> = {
 };
 
 export function isDeveloper(email: string): boolean {
-	return config.developers.includes(securityUtils.decrypt(email));
+	if (developerCache.has(email)) return developerCache.get(email)!;
+
+	const result = config.developers.includes(securityUtils.decrypt(email));
+	developerCache.set(email, result);
+	return result;
 }
 
 export function getUserHighestRole<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>): ResourceReturnEnum<A> | null {
@@ -239,9 +245,17 @@ export async function processPermissionGrants(manager: BoardsManager, request: G
 	const newPermissions: GrantedRoles = [];
 	const updatedPermissions: (GrantedRole & { dbId: string })[] = [];
 
+	const [existingGroupPerms, existingCategoryPerms, existingBoardPerms] = await Promise.all([
+		groupIds && groupIds.length > 0 && groupRole ? db(manager, 'groupPermission', 'findMany', { where: { userId, groupId: { in: groupIds } } }) : Promise.resolve([]),
+		categoryIds && categoryIds.length > 0 && categoryRole ? db(manager, 'categoryPermission', 'findMany', { where: { userId, categoryId: { in: categoryIds } } }) : Promise.resolve([]),
+		boardIds && boardIds.length > 0 && boardRole ? db(manager, 'boardPermission', 'findMany', { where: { userId, boardId: { in: boardIds } } }) : Promise.resolve([]),
+	]);
+
 	if (groupIds && groupIds.length > 0 && groupRole) {
+		const existingMap = new Map((existingGroupPerms || []).map((p) => [p.groupId, p]));
+
 		for (const groupId of groupIds) {
-			const existing = await db(manager, 'groupPermission', 'findFirst', { where: { userId, groupId } });
+			const existing = existingMap.get(groupId);
 
 			if (!existing) newPermissions.push({ type: 'group', resourceId: groupId, role: groupRole });
 			else {
@@ -261,8 +275,10 @@ export async function processPermissionGrants(manager: BoardsManager, request: G
 	}
 
 	if (categoryIds && categoryIds.length > 0 && categoryRole) {
+		const existingMap = new Map((existingCategoryPerms || []).map((p) => [p.categoryId, p]));
+
 		for (const categoryId of categoryIds) {
-			const existing = await db(manager, 'categoryPermission', 'findFirst', { where: { userId, categoryId } });
+			const existing = existingMap.get(categoryId);
 
 			if (!existing) newPermissions.push({ type: 'category', resourceId: categoryId, role: categoryRole });
 			else {
@@ -282,8 +298,10 @@ export async function processPermissionGrants(manager: BoardsManager, request: G
 	}
 
 	if (boardIds && boardIds.length > 0 && boardRole) {
+		const existingMap = new Map((existingBoardPerms || []).map((p) => [p.boardId, p]));
+
 		for (const boardId of boardIds) {
-			const existing = await db(manager, 'boardPermission', 'findFirst', { where: { userId, boardId } });
+			const existing = existingMap.get(boardId);
 
 			if (!existing) newPermissions.push({ type: 'board', resourceId: boardId, role: boardRole });
 			else {

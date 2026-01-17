@@ -1,4 +1,4 @@
-import { getAccessLevel } from '../other/permissions.js';
+import { getAccessLevel, getUserHighestRole } from '../other/permissions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { db } from '../core/prisma.js';
 import manager from '../index.js';
@@ -35,6 +35,7 @@ export default [
 							categoryId: true,
 							name: true,
 							index: true,
+							groupId: true,
 							boards: {
 								where: c.var.isDev ? undefined : {
 									OR: [
@@ -57,22 +58,41 @@ export default [
 				},
 			}) || [];
 
+			const groupRoles = new Map<string, ReturnType<typeof getUserHighestRole>>();
+			const categoryRoles = new Map<string, ReturnType<typeof getUserHighestRole>>();
+			const boardRoles = new Map<string, ReturnType<typeof getUserHighestRole>>();
+
+			for (const group of DBGroups) {
+				const groupRole = getUserHighestRole(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } });
+				groupRoles.set(group.groupId, groupRole);
+
+				for (const category of group.categories) {
+					const categoryRole = getUserHighestRole(c.var.DBUser, { type: 'category', data: { groupId: group.groupId, categoryId: category.categoryId } });
+					categoryRoles.set(category.categoryId, categoryRole);
+
+					for (const board of category.boards) {
+						const boardRole = getUserHighestRole(c.var.DBUser, { type: 'board', data: { groupId: group.groupId, categoryId: category.categoryId, boardId: board.boardId } });
+						boardRoles.set(board.boardId, boardRole);
+					}
+				}
+			}
+
 			return json(c, 200, {
 				data: DBGroups.map((group) => ({
 					id: group.groupId,
 					name: group.name,
 					index: group.index,
-					accessLevel: getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } }),
+					accessLevel: getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } }, groupRoles.get(group.groupId) || undefined),
 					categories: group.categories.map((category) => ({
 						id: category.categoryId,
 						name: category.name,
 						index: category.index,
-						accessLevel: getAccessLevel(c.var.DBUser, { type: 'category', data: { groupId: group.groupId, categoryId: category.categoryId } }),
+						accessLevel: getAccessLevel(c.var.DBUser, { type: 'category', data: { groupId: group.groupId, categoryId: category.categoryId } }, categoryRoles.get(category.categoryId) || undefined),
 						boards: category.boards.map((board) => ({
 							id: board.boardId,
 							name: board.name,
 							index: board.index,
-							accessLevel: getAccessLevel(c.var.DBUser, { type: 'board', data: { groupId: group.groupId, categoryId: category.categoryId, boardId: board.boardId } }),
+							accessLevel: getAccessLevel(c.var.DBUser, { type: 'board', data: { groupId: group.groupId, categoryId: category.categoryId, boardId: board.boardId } }, boardRoles.get(board.boardId) || undefined),
 							totalSizeBytes: board.totalSizeBytes,
 							scheduledForDeletion: board.scheduledForDeletion,
 							hasFlashcards: board.flashcardDeck !== null,

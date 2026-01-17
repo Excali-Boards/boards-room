@@ -219,7 +219,7 @@ export default class Files extends BaseFiles {
 		const uploadResult = await this.uploadMediaFile(boardId, fileData.id, buffer, fileData.mimeType, true);
 		if (!uploadResult) return false;
 
-		await this.manager.prisma.file.upsert({
+		await db(this.manager, 'file', 'upsert', {
 			where: { fileId: fileData.id },
 			update: { mimeType: fileData.mimeType, sizeBytes: buffer.length, createdAt: new Date() },
 			create: {

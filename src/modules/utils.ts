@@ -1,8 +1,17 @@
 import { BoardWithFiles, IpApiResponse } from '../types.js';
 import { BoardsManager } from '../index.js';
+import config from '../core/config.js';
 import { db } from '../core/prisma.js';
 import axios from 'axios';
 import net from 'net';
+
+export function buildDatabaseUrl(): string {
+	const url = new URL(config.databaseUrl);
+	url.searchParams.set('connection_limit', config.database.poolMax.toString());
+	url.searchParams.set('pool_timeout', '20');
+	url.searchParams.set('connect_timeout', '10');
+	return url.toString();
+}
 
 export default class Utils {
 

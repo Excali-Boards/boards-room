@@ -59,13 +59,35 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const DBUsers = await db(manager, 'user', 'findMany', { where: {}, ...DBUserSelectArgs }) || [];
+			const page = parseInt(c.req.query('page') || '1');
+			const limit = Math.min(parseInt(c.req.query('limit') || '50'), 100);
+			const skip = (page - 1) * limit;
+
+			const [DBUsers, total] = await Promise.all([
+				db(manager, 'user', 'findMany', {
+					where: {},
+					skip, take: limit,
+					orderBy: { dbId: 'asc' },
+					...DBUserSelectArgs,
+				}),
+				db(manager, 'user', 'count', { where: {} }),
+			]);
+
+			if (!DBUsers || total === null) return json(c, 500, { error: 'Failed to retrieve users.' });
 
 			return json(c, 200, {
-				data: DBUsers.map((user) => ({
-					...user,
-					isDev: isDeveloper(user.email),
-				})),
+				data: {
+					users: DBUsers.map((user) => ({
+						...user,
+						isDev: isDeveloper(user.email),
+					})),
+					pagination: {
+						page,
+						limit,
+						total,
+						hasMore: skip + DBUsers.length < total,
+					},
+				},
 			});
 		},
 	}),
