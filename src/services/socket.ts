@@ -61,7 +61,8 @@ export default class SocketServer {
 
 	private handleConnection(): void {
 		this.io.on('connection', async (socket) => {
-			this.manager.prometheus.updateSocketMetrics(this.io.sockets.sockets.size, this.excalidrawSocket.roomData.size);
+			const totalRooms = this.excalidrawSocket.roomData.size + this.tldrawSocket.roomData.size;
+			this.manager.prometheus.updateSocketMetrics(this.io.sockets.sockets.size, totalRooms);
 
 			const token = socket.handshake.auth.token as string;
 			const targetRoom = socket.handshake.auth.room as string;
@@ -74,7 +75,11 @@ export default class SocketServer {
 			if (!DBBoard) return socket.disconnect(true);
 
 			const access = hasAccessToBoardWithIds(DBUser, DBBoard.boardId, DBBoard.categoryId, DBBoard.category.groupId);
-			if (!access.hasAccess) return socket.disconnect(true); const disconnectTimeout = setTimeout(() => {
+			if (!access.hasAccess) return socket.disconnect(true);
+
+			this.manager.prometheus.startUserSession(DBUser.userId, DBBoard.boardId, socket.id);
+
+			const disconnectTimeout = setTimeout(() => {
 				socket.disconnect(true);
 				this.connectionTimes.delete(socket.id);
 			}, 4 * 60 * 60 * 1000);
@@ -112,8 +117,6 @@ export default class SocketServer {
 	public async handleFileAction<T extends ActionType>(boardId: string, boardType: BoardType, data: FileActionData<T>): Promise<{ success: number; failed: number; } | string | void> {
 		const socket = this.getBoardSocket(boardType);
 		if (!socket) return 'Board type does not support sockets.';
-
-		this.manager.prometheus.recordSocketEvent('fileAction');
 
 		switch (data.action) {
 			case 'add': {
@@ -287,7 +290,11 @@ export class ExcalidrawSocket {
 
 		socket.on('disconnect', async () => {
 			clearTimeout(this.socket.connectionTimes.get(socket.id));
-			this.socket.manager.prometheus.updateSocketMetrics(this.socket.io.sockets.sockets.size - 1, this.roomData.size);
+
+			await this.socket.manager.prometheus.endUserSession(socket.id);
+
+			const totalRooms = this.roomData.size + this.socket.tldrawSocket.roomData.size;
+			this.socket.manager.prometheus.updateSocketMetrics(this.socket.io.sockets.sockets.size - 1, totalRooms);
 
 			this.socket.connectionTimes.delete(socket.id);
 			socket.leave(DBBoard.boardId);
@@ -318,17 +325,17 @@ export class ExcalidrawSocket {
 
 		socket.on('broadcastScene', (data) => {
 			if (!DBBoard.canEdit) return;
-			this.socket.manager.prometheus.recordSocketEvent('broadcastScene');
+			this.socket.manager.prometheus.recordUserAction(socket.id);
 			socket.broadcast.to(DBBoard.boardId).emit('broadcastScene', data);
 		});
 
 		socket.on('collaboratorPointerUpdate', (data) => {
-			this.socket.manager.prometheus.recordSocketEvent('collaboratorPointerUpdate');
+			this.socket.manager.prometheus.recordUserAction(socket.id);
 			socket.broadcast.to(DBBoard.boardId).emit('collaboratorPointerUpdate', data);
 		});
 
 		socket.on('relayVisibleSceneBounds', (data) => {
-			this.socket.manager.prometheus.recordSocketEvent('relayVisibleSceneBounds');
+			this.socket.manager.prometheus.recordUserAction(socket.id);
 			socket.broadcast.to(data.roomId).emit('relayVisibleSceneBounds', {
 				bounds: data.bounds,
 				socketId: socket.id,
@@ -336,7 +343,7 @@ export class ExcalidrawSocket {
 		});
 
 		socket.on('userFollow', async (data) => {
-			this.socket.manager.prometheus.recordSocketEvent('userFollow');
+			this.socket.manager.prometheus.recordUserAction(socket.id);
 			const followRoom = `follows@${data.userToFollow.socketId}`;
 
 			if (data.action === 'follow') await socket.join(followRoom);
@@ -350,7 +357,7 @@ export class ExcalidrawSocket {
 
 		socket.on('sendSnapshot', (data) => {
 			if (!DBBoard.canEdit) return;
-			this.socket.manager.prometheus.recordSocketEvent('sendSnapshot');
+			this.socket.manager.prometheus.recordUserAction(socket.id);
 			this.saveRoom(DBBoard.boardId, data);
 		});
 	}
@@ -531,6 +538,7 @@ export class TldrawSocket {
 		this.roomData.set(DBBoard.boardId, roomData);
 
 		socket.on('tldraw', (message) => {
+			this.socket.manager.prometheus.recordUserAction(socket.id);
 			roomData.room.handleSocketMessage(socket.id as SocketId, message);
 		});
 
@@ -550,7 +558,11 @@ export class TldrawSocket {
 
 		socket.on('disconnect', async () => {
 			clearTimeout(this.socket.connectionTimes.get(socket.id));
-			this.socket.manager.prometheus.updateSocketMetrics(this.socket.io.sockets.sockets.size - 1, this.roomData.size);
+
+			await this.socket.manager.prometheus.endUserSession(socket.id);
+
+			const totalRooms = this.roomData.size + this.socket.excalidrawSocket.roomData.size;
+			this.socket.manager.prometheus.updateSocketMetrics(this.socket.io.sockets.sockets.size - 1, totalRooms);
 
 			this.socket.connectionTimes.delete(socket.id);
 			socket.leave(DBBoard.boardId);

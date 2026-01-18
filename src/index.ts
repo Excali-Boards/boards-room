@@ -52,6 +52,7 @@ export default manager;
 
 export async function shutdown() {
 	await manager.socket.saveAllBoards();
+	await manager.prometheus.shutdown();
 	await manager.cache.disconnect();
 	await manager.prisma.$disconnect();
 

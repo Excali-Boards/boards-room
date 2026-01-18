@@ -4,13 +4,6 @@ import { TSPrisma } from '@prisma/client';
 import config from './config.js';
 import crypto from 'crypto';
 
-export type IncludesSwitch<
-	N extends TSPrisma.AllModelNamesLowercase,
-	M extends TSPrisma.AllPrismaMethodsLowercase,
-	T extends TSPrisma.AllArgs[N][M],
-	I extends boolean = false,
-> = I extends true ? TSPrisma.IncludesResult<N, M, T> : TSPrisma.Result<N, M, T>;
-
 const readOperations = ['findUnique', 'findFirst', 'findMany', 'count', 'aggregate'] as const;
 const writeOperations = ['create', 'update', 'upsert', 'delete', 'createMany', 'updateMany', 'deleteMany'] as const;
 
@@ -18,14 +11,12 @@ export async function db<
 	N extends TSPrisma.AllModelNamesLowercase,
 	M extends TSPrisma.AllPrismaMethodsLowercase,
 	T extends TSPrisma.AllArgs[N][M],
-	I extends boolean = false,
 >(
 	instance: BoardsManager,
 	modelName: N,
 	operation: M,
 	args: T | TSPrisma.Args<N, M, T>,
-	includeAll?: I,
-): Promise<IncludesSwitch<N, M, T, I>> {
+): Promise<TSPrisma.Result<N, M, T>> {
 	const startTime = Date.now();
 	const isReadOp = readOperations.includes(operation as never);
 	const isWriteOp = writeOperations.includes(operation as never);
@@ -43,9 +34,7 @@ export async function db<
 			}
 		}
 
-		const newArgs = 'select' in args || 'include' in args || !includeAll ? args : TSPrisma.Functions.computeArgs(modelName, operation, args);
-		const res = await (instance.prisma[modelName][operation] as TSPrisma.Callable)(newArgs) as never;
-
+		const res = await (instance.prisma[modelName][operation] as TSPrisma.Callable)(args) as never;
 		if (typeof res === 'object' && res && 'stack' in res) {
 			throw new Error('An error occurred while trying to interact with the database.', {
 				cause: res,
@@ -88,14 +77,15 @@ export async function invalidateCacheForWrite(instance: BoardsManager, modelName
 
 export function getModelRelations(modelName: string): string[] {
 	const relations: Record<string, string[]> = {
-		board: ['category', 'group', 'file', 'boardPermission'],
+		board: ['category', 'group', 'file', 'boardPermission', 'userActivity'],
 		category: ['group', 'board', 'categoryPermission'],
 		group: ['category', 'board', 'groupPermission'],
-		user: ['session', 'groupPermission', 'categoryPermission', 'boardPermission'],
+		user: ['session', 'groupPermission', 'categoryPermission', 'boardPermission', 'userActivity'],
 		session: ['user'],
 		boardPermission: ['board', 'user'],
 		categoryPermission: ['category', 'user'],
 		groupPermission: ['group', 'user'],
+		userBoardActivity: ['user', 'board'],
 	};
 
 	return relations[modelName] || [];
