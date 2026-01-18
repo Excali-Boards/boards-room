@@ -17,12 +17,23 @@ export default [
 				select: {
 					totalSessions: true,
 					totalActiveSeconds: true,
-					totalActions: true,
 					lastActivityAt: true,
 					board: {
 						select: {
 							boardId: true,
 							name: true,
+							category: {
+								select: {
+									categoryId: true,
+									name: true,
+									group: {
+										select: {
+											groupId: true,
+											name: true,
+										},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -51,13 +62,30 @@ export default [
 				select: {
 					totalSessions: true,
 					totalActiveSeconds: true,
-					totalActions: true,
 					lastActivityAt: true,
 					user: {
 						select: {
 							userId: true,
 							displayName: true,
 							avatarUrl: true,
+						},
+					},
+					board: {
+						select: {
+							boardId: true,
+							name: true,
+							category: {
+								select: {
+									categoryId: true,
+									name: true,
+									group: {
+										select: {
+											groupId: true,
+											name: true,
+										},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -85,7 +113,6 @@ export default [
 				select: {
 					totalSessions: true,
 					totalActiveSeconds: true,
-					totalActions: true,
 					lastActivityAt: true,
 					user: {
 						select: {
@@ -98,6 +125,18 @@ export default [
 						select: {
 							boardId: true,
 							name: true,
+							category: {
+								select: {
+									categoryId: true,
+									name: true,
+									group: {
+										select: {
+											groupId: true,
+											name: true,
+										},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -124,7 +163,6 @@ export default [
 				select: {
 					totalSessions: true,
 					totalActiveSeconds: true,
-					totalActions: true,
 					lastActivityAt: true,
 					user: {
 						select: {
@@ -137,7 +175,18 @@ export default [
 						select: {
 							boardId: true,
 							name: true,
-							categoryId: true,
+							category: {
+								select: {
+									categoryId: true,
+									name: true,
+									group: {
+										select: {
+											groupId: true,
+											name: true,
+										},
+									},
+								},
+							},
 						},
 					},
 				},
