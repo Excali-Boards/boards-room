@@ -1,6 +1,6 @@
+import { PresenceState, RouteMethod, SystemStatus } from '../types.js';
 import { Counter, Gauge, Histogram, register } from 'prom-client';
 import { monitoringConstants } from '../core/constants.js';
-import { RouteMethod, SystemStatus } from '../types.js';
 import { BoardsManager } from '../index.js';
 import { MiddlewareHandler } from 'hono';
 import LoggerModule from './logger.js';
@@ -15,6 +15,10 @@ export type UserActivitySession = {
 	joinedAt: number;
 	lastActivityAt: number;
 	lastPersistedAt: number;
+	presenceState: PresenceState;
+	lastStateAt: number;
+	activeMsTotal: number;
+	activeMsSincePersist: number;
 };
 
 export class MetricsBase {
@@ -207,6 +211,10 @@ export default class PrometheusMetrics extends MetricsBase {
 			joinedAt: now,
 			lastActivityAt: now,
 			lastPersistedAt: now,
+			presenceState: 'active',
+			lastStateAt: now,
+			activeMsTotal: 0,
+			activeMsSincePersist: 0,
 		});
 
 		const boardSessions = Array.from(this.activeSessions.values()).filter((s) => s.boardId === boardId).length;
@@ -217,10 +225,28 @@ export default class PrometheusMetrics extends MetricsBase {
 	}
 
 	public recordUserAction(socketId: string): void {
+		this.updateUserPresence(socketId, 'active');
+	}
+
+	public updateUserPresence(socketId: string, nextState: PresenceState): void {
 		const session = this.activeSessions.get(socketId);
 		if (!session) return;
 
-		session.lastActivityAt = Date.now();
+		const now = Date.now();
+		if (session.presenceState === nextState) {
+			if (nextState === 'active') session.lastActivityAt = now;
+			return;
+		}
+
+		if (session.presenceState === 'active') {
+			const activeDelta = now - session.lastStateAt;
+			session.activeMsTotal += activeDelta;
+			session.activeMsSincePersist += activeDelta;
+		}
+
+		session.presenceState = nextState;
+		session.lastStateAt = now;
+		if (nextState === 'active') session.lastActivityAt = now;
 	}
 
 	public async endUserSession(socketId: string): Promise<void> {
@@ -228,8 +254,15 @@ export default class PrometheusMetrics extends MetricsBase {
 		if (!session) return;
 
 		const now = Date.now();
-		const durationSeconds = Math.floor((now - session.joinedAt) / 1000);
-		const durationDeltaSeconds = Math.floor((now - session.lastPersistedAt) / 1000);
+		if (session.presenceState === 'active') {
+			const activeDelta = now - session.lastStateAt;
+			session.activeMsTotal += activeDelta;
+			session.activeMsSincePersist += activeDelta;
+			session.lastStateAt = now;
+		}
+
+		const durationSeconds = Math.floor(session.activeMsTotal / 1000);
+		const durationDeltaSeconds = Math.floor(session.activeMsSincePersist / 1000);
 
 		this.userSessionDuration.observe({ user_id: session.userId, board_id: session.boardId }, durationSeconds);
 
@@ -283,7 +316,17 @@ export default class PrometheusMetrics extends MetricsBase {
 		for (const session of sessions) {
 			try {
 				const now = Date.now();
-				const durationDeltaSeconds = Math.floor((now - session.lastPersistedAt) / 1000);
+				if (session.presenceState === 'active') {
+					const activeDelta = now - session.lastStateAt;
+					session.activeMsTotal += activeDelta;
+					session.activeMsSincePersist += activeDelta;
+					session.lastStateAt = now;
+				}
+
+				const durationDeltaSeconds = Math.floor(session.activeMsSincePersist / 1000);
+
+				session.lastPersistedAt = now;
+				session.activeMsSincePersist = 0;
 
 				if (durationDeltaSeconds <= 0) continue;
 
@@ -306,8 +349,6 @@ export default class PrometheusMetrics extends MetricsBase {
 						lastActivityAt: new Date(session.lastActivityAt),
 					},
 				});
-
-				session.lastPersistedAt = now;
 			} catch (error) {
 				this.recordError('activity_persistence', 'metrics');
 				LoggerModule('Metrics', `Error persisting active session state: ${error}`, 'red');

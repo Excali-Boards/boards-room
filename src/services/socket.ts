@@ -288,6 +288,11 @@ export class ExcalidrawSocket {
 		socket.broadcast.to(DBBoard.boardId).emit('setCollaborators', Array.from(roomData.collaborators.values()));
 		setTimeout(() => socket.emit('setCollaborators', Array.from(roomData.collaborators.values())), performanceConstants.socketConnectionTimeoutMs);
 
+		socket.on('presenceUpdate', (data) => {
+			if (!data || (data.state !== 'active' && data.state !== 'idle' && data.state !== 'away')) return;
+			this.socket.manager.prometheus.updateUserPresence(socket.id, data.state);
+		});
+
 		socket.on('disconnect', async () => {
 			clearTimeout(this.socket.connectionTimes.get(socket.id));
 
@@ -555,6 +560,11 @@ export class TldrawSocket {
 		});
 
 		socket.emit('init', { snapshot: null });
+
+		socket.on('presenceUpdate', (data) => {
+			if (!data || (data.state !== 'active' && data.state !== 'idle' && data.state !== 'away')) return;
+			this.socket.manager.prometheus.updateUserPresence(socket.id, data.state);
+		});
 
 		socket.on('disconnect', async () => {
 			clearTimeout(this.socket.connectionTimes.get(socket.id));

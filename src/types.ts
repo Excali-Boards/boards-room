@@ -243,6 +243,12 @@ export type CollaboratorPointer = {
 	};
 };
 
+export type PresenceState = 'active' | 'idle' | 'away';
+
+export type PresenceUpdatePayload = {
+	state: PresenceState;
+};
+
 export type UserToFollow = {
 	socketId: string;
 	username: string;
@@ -310,6 +316,8 @@ export type ClientToServerEvents = {
 	collaboratorPointerUpdate: (data: CollaboratorPointer) => unknown;
 	userFollow: (data: OnUserFollowedPayload) => unknown;
 	relayVisibleSceneBounds: (data: BoundsData<'roomId'>) => unknown;
+
+	presenceUpdate: (data: PresenceUpdatePayload) => unknown;
 };
 
 export type SystemStatus = {
