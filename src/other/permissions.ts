@@ -2,10 +2,10 @@ import { PermissionGrantResult, UserRole, GlobalRole, ResourceType, AccessLevel,
 import { addPermission, getBoardResourceId, getCategoryResourceId, getGroupResourceId, securityUtils } from '../modules/functions.js';
 import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
 import { GrantPermissionsRequest } from '../routes/permissions.js';
+import { db, invalidateCacheForWrite } from '../core/prisma.js';
 import { DBUserPartialType } from './vars.js';
 import { BoardsManager } from '../index.js';
 import config from '../core/config.js';
-import { db } from '../core/prisma.js';
 import crypto from 'crypto';
 
 const developerCache = new Map<string, boolean>();
@@ -393,6 +393,12 @@ export async function applyPermissionGrants(manager: BoardsManager, result: Perm
 			}
 		}
 	});
+
+	if (newPermissions.some((p) => p.type === 'group') || updatedPermissions.some((p) => p.type === 'group')) await invalidateCacheForWrite(manager, 'groupPermission');
+	if (newPermissions.some((p) => p.type === 'category') || updatedPermissions.some((p) => p.type === 'category')) await invalidateCacheForWrite(manager, 'categoryPermission');
+	if (newPermissions.some((p) => p.type === 'board') || updatedPermissions.some((p) => p.type === 'board')) await invalidateCacheForWrite(manager, 'boardPermission');
+
+	await invalidateCacheForWrite(manager, 'user');
 }
 
 export async function collectResourcePermissions(resourceType: ResourceType, resourceId: string, manager: BoardsManager): Promise<ResourcePermissionsResult> {

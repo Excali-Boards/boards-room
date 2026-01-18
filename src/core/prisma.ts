@@ -77,15 +77,35 @@ export async function invalidateCacheForWrite(instance: BoardsManager, modelName
 
 export function getModelRelations(modelName: string): string[] {
 	const relations: Record<string, string[]> = {
-		board: ['category', 'group', 'file', 'boardPermission', 'userActivity'],
-		category: ['group', 'board', 'categoryPermission'],
-		group: ['category', 'board', 'groupPermission'],
-		user: ['session', 'groupPermission', 'categoryPermission', 'boardPermission', 'userActivity'],
+		// Core entities
+		user: ['session', 'loginMethod', 'groupPermission', 'categoryPermission', 'boardPermission', 'userBoardActivity', 'event', 'invite', 'deckProgress'],
 		session: ['user'],
-		boardPermission: ['board', 'user'],
-		categoryPermission: ['category', 'user'],
+		loginMethod: ['user'],
+
+		// Hierarchy: Group -> Category -> Board
+		group: ['category', 'groupPermission', 'event'],
+		category: ['group', 'board', 'categoryPermission'],
+		board: ['category', 'file', 'boardPermission', 'userBoardActivity', 'flashcardDeck'],
+
+		// Permissions
 		groupPermission: ['group', 'user'],
+		categoryPermission: ['category', 'user'],
+		boardPermission: ['board', 'user'],
+
+		// Files and activities
+		file: ['board'],
 		userBoardActivity: ['user', 'board'],
+
+		// Events/Calendar
+		event: ['group', 'user'],
+
+		// Flashcards
+		flashcardDeck: ['board', 'flashcardCard', 'deckProgress'],
+		flashcardCard: ['flashcardDeck'],
+		deckProgress: ['flashcardDeck', 'user'],
+
+		// Invites
+		invite: ['user'],
 	};
 
 	return relations[modelName] || [];

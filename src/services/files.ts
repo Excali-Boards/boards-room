@@ -1,9 +1,9 @@
 import { DeleteObjectCommand, DeleteObjectCommandOutput, GetObjectCommand, GetObjectCommandOutput, HeadObjectCommand, HeadObjectCommandOutput, ListObjectsV2Command, ListObjectsV2Output, PutObjectCommand, PutObjectCommandOutput, S3Client } from '@aws-sdk/client-s3';
+import { db, invalidateCacheForWrite } from '../core/prisma.js';
 import { UploadFile, WebResponse } from '../types.js';
 import { BoardsManager } from '../index.js';
 import config from '../core/config.js';
 import { Readable } from 'node:stream';
-import { db } from '../core/prisma.js';
 
 class BaseFiles {
 	protected s3 = new S3Client({
@@ -274,6 +274,7 @@ export default class Files extends BaseFiles {
 				)
 				.catch(() => null);
 
+			await invalidateCacheForWrite(this.manager, 'file');
 			await this.updateBoardTotalSize(boardId);
 		}
 
