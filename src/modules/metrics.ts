@@ -214,8 +214,6 @@ export default class PrometheusMetrics extends MetricsBase {
 
 		const boardCollaborators = new Set(Array.from(this.activeSessions.values()).filter((s) => s.boardId === boardId).map((s) => s.userId)).size;
 		this.boardCollaborators.set({ board_id: boardId }, boardCollaborators);
-
-		LoggerModule('Metrics', `User session started: ${userId} on board ${boardId}`, 'cyan');
 	}
 
 	public recordUserAction(socketId: string): void {
@@ -243,8 +241,6 @@ export default class PrometheusMetrics extends MetricsBase {
 
 		await this.persistSessionToDb(session, durationSeconds, durationDeltaSeconds);
 		this.activeSessions.delete(socketId);
-
-		LoggerModule('Metrics', `User session ended: ${session.userId} on board ${session.boardId} (${durationSeconds}s)`, 'cyan');
 	}
 
 	private async persistSessionToDb(session: UserActivitySession, totalDurationSeconds: number, durationDeltaSeconds: number): Promise<void> {
@@ -277,14 +273,12 @@ export default class PrometheusMetrics extends MetricsBase {
 
 	private startActivityPersistence(): void {
 		this.persistInterval = setInterval(() => { this.persistActiveSessions(); }, 60 * 1000);
-		LoggerModule('Metrics', 'Activity persistence started (1min interval).', 'green');
+		LoggerModule('Metrics', 'Activity persistence started.', 'green');
 	}
 
 	private async persistActiveSessions(): Promise<void> {
 		const sessions = Array.from(this.activeSessions.values());
 		if (!sessions.length) return;
-
-		LoggerModule('Metrics', `Persisting ${sessions.length} active sessions...`, 'cyan');
 
 		for (const session of sessions) {
 			try {
