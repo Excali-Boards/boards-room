@@ -1,4 +1,4 @@
-import { processPermissionGrants, applyPermissionGrants, canManagePermissions, collectResourcePermissions, getPermissionCheckData } from '../other/permissions.js';
+import { processPermissionGrants, applyPermissionGrants, canManagePermissions, collectResourcePermissions, getPermissionCheckData, canGrantRole, getUserHighestRole } from '../other/permissions.js';
 import { addPermission, parseZodError } from '../modules/functions.js';
 import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
 import { GrantedEntry, PermUser, ResourceType } from '../types.js';
@@ -19,7 +19,7 @@ export default [
 			const resourceType = c.req.query('type') as ResourceType;
 			if (!resourceType) return json(c, 400, { error: 'Invalid or missing resource type. Must be one of: group, category, board.' });
 
-			const resourceId = c.req.query('id')!;
+			const resourceId = c.req.query('id');
 			if (!resourceId) return json(c, 400, { error: 'Missing resource ID.' });
 
 			const { usersWithAccess, resource } = await collectResourcePermissions(
@@ -228,6 +228,9 @@ export default [
 					for (const groupId of groupIds) {
 						canManage = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId } });
 						if (!canManage) return json(c, 403, { error: `You do not have permission to create invites for this group (ID: ${groupId}).` });
+
+						const granterRole = getUserHighestRole(c.var.DBUser, { type: 'group', data: { groupId } });
+						if (groupRole && granterRole && !canGrantRole(granterRole, groupRole)) return json(c, 403, { error: `You cannot grant ${groupRole} role. You can only grant roles below your own level.` });
 					}
 				}
 
@@ -241,6 +244,9 @@ export default [
 
 						canManage = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 						if (!canManage) return json(c, 403, { error: `You do not have permission to create invites for this category (ID: ${categoryId}).` });
+
+						const granterRole = getUserHighestRole(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+						if (categoryRole && granterRole && !canGrantRole(granterRole, categoryRole)) return json(c, 403, { error: `You cannot grant ${categoryRole} role. You can only grant roles below your own level.` });
 					}
 				}
 
@@ -257,6 +263,9 @@ export default [
 
 						canManage = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId, groupId, categoryId } });
 						if (!canManage) return json(c, 403, { error: `You do not have permission to create invites for this board (ID: ${boardId}).` });
+
+						const granterRole = getUserHighestRole(c.var.DBUser, { type: 'board', data: { boardId, groupId, categoryId } });
+						if (boardRole && granterRole && !canGrantRole(granterRole, boardRole)) return json(c, 403, { error: `You cannot grant ${boardRole} role. You can only grant roles below your own level.` });
 					}
 				}
 			}
@@ -287,6 +296,14 @@ export default [
 					const canManage = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: resourceId } });
 					if (!canManage) return json(c, 403, { error: 'You do not have permission to revoke access to this resource.' });
 
+					if (!c.var.isDev) {
+						const targetUserPerm = await db(manager, 'groupPermission', 'findFirst', { where: { userId, groupId: resourceId }, select: { role: true } });
+						if (targetUserPerm) {
+							const granterRole = getUserHighestRole(c.var.DBUser, { type: 'group', data: { groupId: resourceId } });
+							if (granterRole && !canGrantRole(granterRole, targetUserPerm.role)) return json(c, 403, { error: `You cannot revoke ${targetUserPerm.role} role. You can only manage roles below your own level.` });
+						}
+					}
+
 					break;
 				}
 				case 'category': {
@@ -296,6 +313,14 @@ export default [
 					const canManage = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: resourceId, groupId: category.groupId } });
 					if (!canManage) return json(c, 403, { error: 'You do not have permission to revoke access to this resource.' });
 
+					if (!c.var.isDev) {
+						const targetUserPerm = await db(manager, 'categoryPermission', 'findFirst', { where: { userId, categoryId: resourceId }, select: { role: true } });
+						if (targetUserPerm) {
+							const granterRole = getUserHighestRole(c.var.DBUser, { type: 'category', data: { categoryId: resourceId, groupId: category.groupId } });
+							if (granterRole && !canGrantRole(granterRole, targetUserPerm.role)) return json(c, 403, { error: `You cannot revoke ${targetUserPerm.role} role. You can only manage roles below your own level.` });
+						}
+					}
+
 					break;
 				}
 				case 'board': {
@@ -304,6 +329,14 @@ export default [
 
 					const canManage = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: resourceId, categoryId: board.category.categoryId, groupId: board.category.groupId } });
 					if (!canManage) return json(c, 403, { error: 'You do not have permission to revoke access to this resource.' });
+
+					if (!c.var.isDev) {
+						const targetUserPerm = await db(manager, 'boardPermission', 'findFirst', { where: { userId, boardId: resourceId }, select: { role: true } });
+						if (targetUserPerm) {
+							const granterRole = getUserHighestRole(c.var.DBUser, { type: 'board', data: { boardId: resourceId, categoryId: board.category.categoryId, groupId: board.category.groupId } });
+							if (granterRole && !canGrantRole(granterRole, targetUserPerm.role)) return json(c, 403, { error: `You cannot revoke ${targetUserPerm.role} role. You can only manage roles below your own level.` });
+						}
+					}
 
 					break;
 				}

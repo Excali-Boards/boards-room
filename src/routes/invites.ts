@@ -1,4 +1,4 @@
-import { canManagePermissions, isValidRoleForResource, generateInviteCode, processPermissionGrants, applyPermissionGrants } from '../other/permissions.js';
+import { canManagePermissions, isValidRoleForResource, generateInviteCode, processPermissionGrants, applyPermissionGrants, canGrantRole, getUserHighestRole } from '../other/permissions.js';
 import type { InviteData, ResourceType } from '../types.js';
 import { parseZodError } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
@@ -96,6 +96,9 @@ export default [
 						failedResource = { type: 'group', id: groupId };
 						break;
 					}
+
+					const granterRole = getUserHighestRole(c.var.DBUser, { type: 'group', data: { groupId } });
+					if (groupRole && granterRole && !canGrantRole(granterRole, groupRole)) return json(c, 403, { error: `You cannot grant ${groupRole} role. You can only grant roles below your own level.` });
 				}
 			}
 
@@ -112,6 +115,9 @@ export default [
 						failedResource = { type: 'category', id: categoryId };
 						break;
 					}
+
+					const granterRole = getUserHighestRole(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
+					if (categoryRole && granterRole && !canGrantRole(granterRole, categoryRole)) return json(c, 403, { error: `You cannot grant ${categoryRole} role. You can only grant roles below your own level.` });
 				}
 			}
 
@@ -131,6 +137,9 @@ export default [
 						failedResource = { type: 'board', id: boardId };
 						break;
 					}
+
+					const granterRole = getUserHighestRole(c.var.DBUser, { type: 'board', data: { boardId, groupId, categoryId } });
+					if (boardRole && granterRole && !canGrantRole(granterRole, boardRole)) return json(c, 403, { error: `You cannot grant ${boardRole} role. You can only grant roles below your own level.` });
 				}
 			}
 

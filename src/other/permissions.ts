@@ -115,12 +115,12 @@ export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserParti
 
 			if (role === CategoryRole.CategoryViewer) return 'read';
 			if (role === CategoryRole.CategoryCollaborator) return 'write';
-			if (role === CategoryRole.CategoryManager) return 'write';
+			if (role === CategoryRole.CategoryManager) return 'manage';
 			if (role === CategoryRole.CategoryAdmin) return 'admin';
 
 			if (role === GroupRole.GroupViewer) return 'read';
 			if (role === GroupRole.GroupCollaborator) return 'write';
-			if (role === GroupRole.GroupManager) return 'write';
+			if (role === GroupRole.GroupManager) return 'manage';
 			if (role === GroupRole.GroupAdmin) return 'admin';
 
 			if (role === GlobalRole.Developer) return 'admin';
@@ -176,9 +176,15 @@ export function canManagePermissions<A extends GlobalResourceType>(DBUser: DBUse
 	switch (resource.type) {
 		case 'global': return role === GlobalRole.Developer;
 		case 'board': return role === CategoryRole.CategoryAdmin || role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
-		case 'category': return role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
-		case 'group': return role === GlobalRole.Developer;
+		case 'category': return role === CategoryRole.CategoryAdmin || role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
+		case 'group': return role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
 	}
+}
+
+export function canGrantRole(granterRole: UserRole, targetRole: UserRole): boolean {
+	const granterLevel = PermissionHierarchy[granterRole];
+	const targetLevel = PermissionHierarchy[targetRole];
+	return granterLevel > targetLevel;
 }
 
 export function isValidRoleForResource(role: string, resourceType: ResourceType): boolean {
