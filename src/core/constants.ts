@@ -36,5 +36,5 @@ export const securityConstants = {
 
 export const monitoringConstants = {
 	metricsCollectionIntervalMs: 60 * 1000, // 1 minute
-	systemStatusUpdateIntervalMs: 5 * 60 * 1000, // 5 minutes
+	databaseUpdateIntervalMs: 10 * 60 * 1000, // 10 minutes
 } as const;

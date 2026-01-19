@@ -106,33 +106,43 @@ export class MetricsBase {
 		help: 'CPU usage percentage',
 	});
 
+	protected totalUsers = new Gauge({
+		name: 'boards_total_users',
+		help: 'Total number of users in database',
+	});
+
+	protected totalInvites = new Gauge({
+		name: 'boards_total_invites',
+		help: 'Total number of invites in database',
+	});
+
+	protected totalBoards = new Gauge({
+		name: 'boards_total_boards',
+		help: 'Total number of boards in database',
+	});
+
+	protected totalCategories = new Gauge({
+		name: 'boards_total_categories',
+		help: 'Total number of categories in database',
+	});
+
+	protected totalGroups = new Gauge({
+		name: 'boards_total_groups',
+		help: 'Total number of groups in database',
+	});
+
 	protected errors = new Counter({
 		name: 'boards_errors_total',
 		help: 'Total number of errors',
 		labelNames: ['type', 'source'],
 	});
 
-	constructor () {
-		setInterval(() => this.collectSystemMetrics(), monitoringConstants.metricsCollectionIntervalMs);
-		LoggerModule('Metrics', 'Metrics collection started.', 'green');
-	}
-
-	private async collectSystemMetrics(): Promise<void> {
-		const memUsage = process.memoryUsage();
-		this.memoryUsage.set({ type: 'heap_used' }, memUsage.heapUsed);
-		this.memoryUsage.set({ type: 'heap_total' }, memUsage.heapTotal);
-		this.memoryUsage.set({ type: 'external' }, memUsage.external);
-		this.memoryUsage.set({ type: 'rss' }, memUsage.rss);
-
-		const stats = await pidusage(process.pid);
-		this.cpuUsage.set(stats.cpu);
-	}
-
 	public metricsMiddleware(): MiddlewareHandler {
 		return async (c, next) => {
 			const ignoredRoutes: { path: string; method: RouteMethod | 'ANY'; }[] = [
 				{ path: '/', method: 'ANY' },
-				{ path: '/info/metrics', method: 'ANY' },
+				{ path: '/status', method: 'ANY' },
+				{ path: '/metrics', method: 'ANY' },
 			];
 
 			if (ignoredRoutes.some((route) => route.path === c.req.routePath && route.method === c.req.method)) return next();
@@ -158,21 +168,102 @@ export class MetricsBase {
 export default class PrometheusMetrics extends MetricsBase {
 	private activeSessions = new Map<string, UserActivitySession>();
 	private persistInterval: NodeJS.Timeout | null = null;
+	private systemMetricsInterval: NodeJS.Timeout | null = null;
+	private dbMetricsInterval: NodeJS.Timeout | null = null;
 	public systemStatusData: SystemStatus | null = null;
 
 	constructor (private manager: BoardsManager) {
 		super();
 
-		getSystemMetrics(manager).then((status) => {
-			this.systemStatusData = status;
-		});
+		this.getSystemMetrics();
+		this.getDatabaseMetrics();
+
+		this.systemMetricsInterval = setInterval(() => this.getSystemMetrics(), monitoringConstants.metricsCollectionIntervalMs);
+		this.dbMetricsInterval = setInterval(() => this.getDatabaseMetrics(), monitoringConstants.databaseUpdateIntervalMs);
+
+		LoggerModule('Metrics', 'System metrics collection started (every 1 minute).', 'green');
+		LoggerModule('Metrics', 'Database metrics collection started (every 10 minutes).', 'green');
 
 		this.startActivityPersistence();
 	}
 
-	private async getSystemStatus(): Promise<void> {
-		this.systemStatusData = await getSystemMetrics(this.manager);
-		setInterval(() => this.getSystemStatus(), monitoringConstants.systemStatusUpdateIntervalMs);
+	private async getSystemMetrics(): Promise<void> {
+		try {
+			const memUsage = process.memoryUsage();
+			const stats = await pidusage(process.pid);
+
+			this.memoryUsage.set({ type: 'heap_used' }, memUsage.heapUsed);
+			this.memoryUsage.set({ type: 'heap_total' }, memUsage.heapTotal);
+			this.memoryUsage.set({ type: 'external' }, memUsage.external);
+			this.memoryUsage.set({ type: 'rss' }, memUsage.rss);
+			this.cpuUsage.set(stats.cpu);
+
+			if (!this.systemStatusData) {
+				this.systemStatusData = {
+					cpuUsage: 0,
+					memoryUsage: '0 MB',
+					activeRooms: 0,
+					socketConnections: 0,
+					queuedFiles: 0,
+					totalUsers: 0,
+					totalInvites: 0,
+					totalBoards: 0,
+					totalCategories: 0,
+					totalGroups: 0,
+				};
+			}
+
+			this.systemStatusData.cpuUsage = parseFloat(stats.cpu.toFixed(2));
+			this.systemStatusData.memoryUsage = (memUsage.rss / (1024 * 1024)).toFixed(2) + ' MB';
+			this.systemStatusData.activeRooms = this.manager.socket.excalidrawSocket.roomData.size + this.manager.socket.tldrawSocket.roomData.size;
+			this.systemStatusData.socketConnections = this.manager.socket.io.sockets.sockets.size;
+			this.systemStatusData.queuedFiles = this.manager.socket.excalidrawSocket.queuedFiles.size + this.manager.socket.tldrawSocket.queuedFiles.size;
+		} catch (error) {
+			this.recordError('system_metrics_collection', 'metrics');
+			LoggerModule('Metrics', `Error collecting system metrics: ${error}`, 'red');
+		}
+	}
+
+	private async getDatabaseMetrics(): Promise<void> {
+		try {
+			const [users, invites, boards, categories, groups] = await Promise.all([
+				db(this.manager, 'user', 'count', {}),
+				db(this.manager, 'invite', 'count', {}),
+				db(this.manager, 'board', 'count', {}),
+				db(this.manager, 'category', 'count', {}),
+				db(this.manager, 'group', 'count', {}),
+			]);
+
+			this.totalUsers.set(users || 0);
+			this.totalInvites.set(invites || 0);
+			this.totalBoards.set(boards || 0);
+			this.totalCategories.set(categories || 0);
+			this.totalGroups.set(groups || 0);
+
+			if (!this.systemStatusData) {
+				this.systemStatusData = {
+					cpuUsage: 0,
+					memoryUsage: '0 MB',
+					activeRooms: 0,
+					socketConnections: 0,
+					queuedFiles: 0,
+					totalUsers: 0,
+					totalInvites: 0,
+					totalBoards: 0,
+					totalCategories: 0,
+					totalGroups: 0,
+				};
+			}
+
+			this.systemStatusData.totalUsers = users || 0;
+			this.systemStatusData.totalInvites = invites || 0;
+			this.systemStatusData.totalBoards = boards || 0;
+			this.systemStatusData.totalCategories = categories || 0;
+			this.systemStatusData.totalGroups = groups || 0;
+		} catch (error) {
+			this.recordError('db_metrics_collection', 'metrics');
+			LoggerModule('Metrics', `Error collecting database metrics: ${error}`, 'red');
+		}
 	}
 
 	public recordDbQuery(table: string, operation: string, durationSec: number): void {
@@ -358,6 +449,9 @@ export default class PrometheusMetrics extends MetricsBase {
 
 	public async shutdown(): Promise<void> {
 		if (this.persistInterval) clearInterval(this.persistInterval);
+		if (this.systemMetricsInterval) clearInterval(this.systemMetricsInterval);
+		if (this.dbMetricsInterval) clearInterval(this.dbMetricsInterval);
+
 		await this.persistActiveSessions();
 
 		const sessions = Array.from(this.activeSessions.keys());
@@ -369,26 +463,4 @@ export default class PrometheusMetrics extends MetricsBase {
 	public getActiveSessions(): UserActivitySession[] {
 		return Array.from(this.activeSessions.values());
 	}
-}
-
-// Functions.
-export async function getSystemMetrics(manager: BoardsManager): Promise<SystemStatus> {
-	const memUsage = process.memoryUsage();
-	const stats = await pidusage(process.pid);
-
-	return {
-		cpuUsage: parseFloat(stats.cpu.toFixed(2)),
-		memoryUsage: (memUsage.rss / (1024 * 1024)).toFixed(2) + ' MB',
-
-		activeRooms: manager.socket.excalidrawSocket.roomData.size + manager.socket.tldrawSocket.roomData.size,
-		socketConnections: manager.socket.io.sockets.sockets.size,
-		queuedFiles: manager.socket.excalidrawSocket.queuedFiles.size + manager.socket.tldrawSocket.queuedFiles.size,
-
-		totalUsers: await db(manager, 'user', 'count', {}) || 0,
-		totalInvites: await db(manager, 'invite', 'count', {}) || 0,
-
-		totalBoards: await db(manager, 'board', 'count', {}) || 0,
-		totalCategories: await db(manager, 'category', 'count', {}) || 0,
-		totalGroups: await db(manager, 'group', 'count', {}) || 0,
-	};
 }
