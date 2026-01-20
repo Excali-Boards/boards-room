@@ -371,8 +371,8 @@ export default [
 				case 'board': {
 					if (!resourceBoardId || !resourceCategoryId || !resourceGroupId) return json(c, 400, { error: 'Missing resource identifiers. Must provide groupId, categoryId, and boardId for board resources.' });
 
-					const canViewResource = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: resourceBoardId, categoryId: resourceCategoryId, groupId: resourceGroupId } });
-					if (!canViewResource) return json(c, 403, { error: 'You do not have permission to view this resource.' });
+					const canManage = canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: resourceBoardId, categoryId: resourceCategoryId, groupId: resourceGroupId } });
+					if (!canManage) return json(c, 403, { error: 'You do not have permission to view this resource.' });
 
 					invites = await db(manager, 'invite', 'findMany', {
 						where: {
@@ -389,8 +389,8 @@ export default [
 				case 'category': {
 					if (!resourceCategoryId || !resourceGroupId) return json(c, 400, { error: 'Missing resource identifiers. Must provide groupId and categoryId for category resources.' });
 
-					const canViewResource = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: resourceCategoryId, groupId: resourceGroupId } });
-					if (!canViewResource) return json(c, 403, { error: 'You do not have permission to view this resource.' });
+					const canManage = canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: resourceCategoryId, groupId: resourceGroupId } });
+					if (!canManage) return json(c, 403, { error: 'You do not have permission to view this resource.' });
 
 					invites = await db(manager, 'invite', 'findMany', {
 						where: {
@@ -406,8 +406,8 @@ export default [
 				case 'group': {
 					if (!resourceGroupId) return json(c, 400, { error: 'Missing resource identifier. Must provide groupId for group resources.' });
 
-					const canViewResource = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: resourceGroupId } });
-					if (!canViewResource) return json(c, 403, { error: 'You do not have permission to view this resource.' });
+					const canManage = canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId: resourceGroupId } });
+					if (!canManage) return json(c, 403, { error: 'You do not have permission to view this resource.' });
 
 					invites = await db(manager, 'invite', 'findMany', {
 						where: {

@@ -1,4 +1,4 @@
-import { PermissionGrantResult, UserRole, GlobalRole, ResourceType, AccessLevel, GlobalResourceType, ResourceReturnEnum, ResourceTypeGeneric, GrantedRoles, GrantedRole, GrantedEntry, ResourcePermissionsResult, PermissionCheckData } from '../types.js';
+import { PermissionGrantResult, UserRole, GlobalRole, ResourceType, AccessLevel, GlobalResourceType, ResourceReturnEnum, ResourceTypeGeneric, GrantedRoles, GrantedRole, GrantedEntry, ResourcePermissionsResult, PermissionCheckData, ResourceId } from '../types.js';
 import { addPermission, getBoardResourceId, getCategoryResourceId, getGroupResourceId, securityUtils } from '../modules/functions.js';
 import { BoardRole, CategoryRole, GroupRole } from '@prisma/client';
 import { GrantPermissionsRequest } from '../routes/permissions.js';
@@ -169,15 +169,32 @@ export function canManage<A extends GlobalResourceType>(DBUser: DBUserPartialTyp
 	return accessLevel === 'manage' || accessLevel === 'admin';
 }
 
-export function canManagePermissions<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
-	const role = userHighestRole || getUserHighestRole(DBUser, resource);
-	if (!role) return false;
-
+export function canManagePermissions<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>): boolean {
 	switch (resource.type) {
-		case 'global': return role === GlobalRole.Developer;
-		case 'board': return role === CategoryRole.CategoryAdmin || role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
-		case 'category': return role === CategoryRole.CategoryAdmin || role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
-		case 'group': return role === GroupRole.GroupAdmin || role === GlobalRole.Developer;
+		case 'global': return isDeveloper(DBUser.email);
+		case 'group': {
+			const { groupId } = (resource.data || {}) as ResourceId<'group'>;
+			if (!groupId) return false;
+
+			return isDeveloper(DBUser.email)
+				|| DBUser.groupPermissions.some((gp) => gp.groupId === groupId && gp.role === GroupRole.GroupAdmin);
+		}
+		case 'category': {
+			const { categoryId, groupId } = (resource.data || {}) as ResourceId<'category'>;
+			if (!categoryId || !groupId) return false;
+
+			return isDeveloper(DBUser.email)
+				|| DBUser.categoryPermissions.some((cp) => cp.categoryId === categoryId && cp.role === CategoryRole.CategoryAdmin)
+				|| DBUser.groupPermissions.some((gp) => gp.groupId === groupId && gp.role === GroupRole.GroupAdmin);
+		}
+		case 'board': {
+			const { categoryId, groupId } = (resource.data || {}) as ResourceId<'board'>;
+			if (!categoryId || !groupId) return false;
+
+			return isDeveloper(DBUser.email)
+				|| DBUser.categoryPermissions.some((cp) => cp.categoryId === categoryId && cp.role === CategoryRole.CategoryAdmin)
+				|| DBUser.groupPermissions.some((gp) => gp.groupId === groupId && gp.role === GroupRole.GroupAdmin);
+		}
 	}
 }
 

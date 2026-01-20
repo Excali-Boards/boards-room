@@ -181,9 +181,6 @@ export default class PrometheusMetrics extends MetricsBase {
 		this.systemMetricsInterval = setInterval(() => this.getSystemMetrics(), monitoringConstants.metricsCollectionIntervalMs);
 		this.dbMetricsInterval = setInterval(() => this.getDatabaseMetrics(), monitoringConstants.databaseUpdateIntervalMs);
 
-		LoggerModule('Metrics', 'System metrics collection started (every 1 minute).', 'green');
-		LoggerModule('Metrics', 'Database metrics collection started (every 10 minutes).', 'green');
-
 		this.startActivityPersistence();
 	}
 

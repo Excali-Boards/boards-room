@@ -33,8 +33,8 @@ export default [
 			const permCheckData = await getPermissionCheckData(resourceType, resourceId, manager);
 			if (!permCheckData) return json(c, 404, { error: 'Resource not found.' });
 
-			const canView = canManagePermissions(c.var.DBUser, permCheckData);
-			if (!canView) return json(c, 403, { error: 'No permission' });
+			const canManage = canManagePermissions(c.var.DBUser, permCheckData);
+			if (!canManage) return json(c, 403, { error: 'You do not have permission to view permissions for this resource.' });
 
 			const userIds = Array.from(usersWithAccess.keys());
 			const users = userIds.length ? (await db(manager, 'user', 'findMany', {
