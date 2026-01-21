@@ -15,13 +15,14 @@ console.clear();
 
 export class BoardsManager {
 	public hono = new Hono<HonoEnv>();
+	public cache = new CacheService(this);
+
 	public prisma = new PrismaClient({
 		datasources: { db: { url: buildDatabaseUrl() } },
 	});
 
 	public prometheus = new PrometheusMetrics(this);
 	public socket = new SocketServer(this);
-	public cache = new CacheService(this);
 	public routes = new Routes(this);
 	public utils = new Utils(this);
 	public files = new Files(this);
