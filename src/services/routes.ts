@@ -80,10 +80,8 @@ export default class Routes {
 	private processRoute(route: RouteType): void {
 		if (!route.path || !route.method) return;
 
-		const handlers: MiddlewareHandler[] = [
-			this.globalHandler(),
-			// this.rateLimit(),
-		];
+		const handlers: MiddlewareHandler[] = [this.globalHandler()];
+		if (config.rateLimiting.enabled) handlers.push(this.rateLimit(config.rateLimiting.options));
 
 		const key = route.path + '|' + route.method as `${string}|${string}`;
 		this.routes.set(key, { enabled: route.enabled ?? true });
@@ -186,7 +184,7 @@ export default class Routes {
 		};
 	}
 
-	private rateLimit(options = { windowMs: 60000, max: 200 }): MiddlewareHandler<HonoEnv> { // 200 requests per minute
+	private rateLimit(options = { windowMs: 60000, maxRequests: 200 }): MiddlewareHandler<HonoEnv> { // 200 requests per minute
 		return async (c, next) => {
 			let ip: string | undefined;
 
@@ -230,8 +228,8 @@ export default class Routes {
 
 				await this.manager.cache.set(cacheKey, record, ttlSeconds);
 
-				if (record.count > options.max) {
-					LoggerModule('Security', `Rate limit exceeded for IP: ${ip} (${record.count}/${options.max} requests in ${options.windowMs}ms window)`, 'yellow');
+				if (record.count > options.maxRequests) {
+					LoggerModule('Security', `Rate limit exceeded for IP: ${ip} (${record.count}/${options.maxRequests} requests in ${options.windowMs}ms window)`, 'yellow');
 					return json(c, 429, { error: 'Too many requests. Please try again later.' });
 				}
 			} catch (error) {

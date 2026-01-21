@@ -34,6 +34,14 @@ const config = {
 		poolMin: process.env.DB_POOL_MIN ? parseInt(process.env.DB_POOL_MIN, 10) : 2,
 		poolMax: process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : 10,
 	},
+
+	rateLimiting: {
+		enabled: process.env.RATE_LIMITING_ENABLED === 'true',
+		options: {
+			windowMs: process.env.RATE_LIMITING_WINDOW_MS ? parseInt(process.env.RATE_LIMITING_WINDOW_MS, 10) : 60000,
+			maxRequests: process.env.RATE_LIMITING_MAX_REQUESTS ? parseInt(process.env.RATE_LIMITING_MAX_REQUESTS, 10) : 100,
+		},
+	},
 } satisfies z.infer<typeof ConfigSchema>;
 
 const ConfigSchema = z.object({
@@ -64,6 +72,14 @@ const ConfigSchema = z.object({
 	database: z.object({
 		poolMin: z.number().int().min(1).max(100),
 		poolMax: z.number().int().min(1).max(100),
+	}),
+
+	rateLimiting: z.object({
+		enabled: z.boolean(),
+		options: z.object({
+			windowMs: z.number().int().min(1000),
+			maxRequests: z.number().int().min(1),
+		}),
 	}),
 });
 
