@@ -82,7 +82,7 @@ export default class Routes {
 
 		const handlers: MiddlewareHandler[] = [
 			this.globalHandler(),
-			this.rateLimit(),
+			// this.rateLimit(),
 		];
 
 		const key = route.path + '|' + route.method as `${string}|${string}`;
@@ -214,7 +214,7 @@ export default class Routes {
 			const ttlSeconds = Math.ceil(options.windowMs / 1000);
 
 			if (!this.manager.cache.isAvailable()) {
-				LoggerModule('Security', 'Rate limiting requires Redis/Cache to be enabled and available', 'red');
+				LoggerModule('Security', 'Rate limiting requires Redis/Cache to be enabled and available.', 'red');
 				return json(c, 503, { error: 'Service temporarily unavailable.' });
 			}
 
