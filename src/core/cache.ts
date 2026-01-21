@@ -15,11 +15,6 @@ export default class CacheService {
 	constructor (private readonly manager: BoardsManager) { }
 
 	public async init(): Promise<void> {
-		if (!config.valkey.enabled) {
-			LoggerModule('Cache', 'Caching disabled.', 'yellow');
-			return;
-		}
-
 		try {
 			this.client = new Valkey({
 				host: config.valkey.host,
@@ -73,7 +68,7 @@ export default class CacheService {
 		if (!this.isAvailable()) return;
 		try {
 			const serialized = JSON.stringify(value);
-			const cacheTtl = ttl || config.valkey.defaultTtl;
+			const cacheTtl = ttl || config.valkey.ttl;
 			await this.client!.setex(key, cacheTtl, serialized);
 		} catch (error) {
 			LoggerModule('Cache', `Set error: ${error instanceof Error ? error.message : ''}`, 'red');

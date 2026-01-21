@@ -22,7 +22,7 @@ export async function db<
 	const isWriteOp = writeOperations.includes(operation as never);
 
 	const cacheKey = generateCacheKey(modelName, operation, args);
-	const shouldCache = isReadOp && config.valkey.enabled !== false && instance.cache?.isAvailable();
+	const shouldCache = isReadOp && instance.cache.isAvailable();
 
 	try {
 		if (shouldCache) {
@@ -44,8 +44,8 @@ export async function db<
 		const duration = (Date.now() - startTime) / 1000;
 		instance.prometheus.recordDbQuery(modelName, operation, duration);
 
-		if (shouldCache) await instance.cache.set(cacheKey, res, config.valkey.defaultTtl);
-		if (isWriteOp && instance.cache?.isAvailable()) await invalidateCacheForWrite(instance, modelName);
+		if (shouldCache) await instance.cache.set(cacheKey, res, config.valkey.ttl);
+		if (isWriteOp && instance.cache.isAvailable()) await invalidateCacheForWrite(instance, modelName);
 
 		return recursiveDateConversion(res) as never;
 	} catch (error) {

@@ -27,9 +27,7 @@ const config = {
 		port: process.env.CACHE_PORT ? parseInt(process.env.CACHE_PORT, 10) : 6379,
 		password: process.env.CACHE_PASSWORD || null,
 		db: process.env.CACHE_DB ? parseInt(process.env.CACHE_DB, 10) : 0,
-
-		enabled: process.env.CACHE_ENABLED === 'true',
-		defaultTtl: process.env.CACHE_DEFAULT_TTL ? parseInt(process.env.CACHE_DEFAULT_TTL, 10) : 300,
+		ttl: process.env.CACHE_DEFAULT_TTL ? parseInt(process.env.CACHE_DEFAULT_TTL, 10) : 300,
 	},
 
 	database: {
@@ -60,9 +58,7 @@ const ConfigSchema = z.object({
 		port: z.number().int().min(1).max(65535),
 		password: z.string().nullable(),
 		db: z.number().int().min(0).max(15),
-
-		enabled: z.boolean(),
-		defaultTtl: z.number().int().min(1),
+		ttl: z.number().int().min(1),
 	}),
 
 	database: z.object({

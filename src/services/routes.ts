@@ -19,7 +19,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default class Routes {
-	private ipHits: Map<string, { count: number; lastRequest: number; }> = new Map();
 	public routes: Map<`${string}|${string}`, { enabled: boolean; }> = new Map();
 	public routesPath = path.join(__dirname, '..', 'routes');
 
@@ -189,25 +188,56 @@ export default class Routes {
 
 	private rateLimit(options = { windowMs: 60000, max: 200 }): MiddlewareHandler<HonoEnv> { // 200 requests per minute
 		return async (c, next) => {
-			const info = getConnInfo(c);
-			const ip = info.remote.address || 'unknown';
-			const now = Date.now();
+			let ip: string | undefined;
 
-			const record = this.ipHits.get(ip) || { count: 0, lastRequest: now };
+			ip = c.req.header('cf-connecting-ip');
+			if (!ip) ip = c.req.header('x-real-ip');
 
-			if (now - record.lastRequest > options.windowMs) {
-				record.count = 1;
-				record.lastRequest = now;
-			} else {
-				record.count++;
+			if (!ip) {
+				const forwarded = c.req.header('x-forwarded-for');
+				if (forwarded) ip = forwarded.split(',')[0]?.trim();
 			}
 
-			this.ipHits.set(ip, record);
+			if (!ip) ip = c.req.header('true-client-ip');
 
-			if (record.count > options.max) {
-				return json(c, 429, {
-					error: 'Too many requests. Please try again later.',
-				});
+			if (!ip) {
+				const info = getConnInfo(c);
+				ip = info.remote.address;
+			}
+
+			if (!ip || ip === 'unknown') return json(c, 403, { error: 'Unable to determine client IP address.' });
+
+			ip = ip.replace(/^::ffff:/, '');
+
+			const now = Date.now();
+			const cacheKey = `ratelimit:${ip}`;
+			const ttlSeconds = Math.ceil(options.windowMs / 1000);
+
+			if (!this.manager.cache.isAvailable()) {
+				LoggerModule('Security', 'Rate limiting requires Redis/Cache to be enabled and available', 'red');
+				return json(c, 503, { error: 'Service temporarily unavailable.' });
+			}
+
+			try {
+				const cached = await this.manager.cache.get<{ count: number; lastRequest: number; }>(cacheKey);
+				let record = cached || { count: 0, lastRequest: now };
+
+				if (now - record.lastRequest > options.windowMs) {
+					record = { count: 1, lastRequest: now };
+				} else {
+					record.count++;
+				}
+
+				await this.manager.cache.set(cacheKey, record, ttlSeconds);
+
+				if (record.count > options.max) {
+					LoggerModule('Security', `Rate limit exceeded for IP: ${ip} (${record.count}/${options.max} requests in ${options.windowMs}ms window)`, 'yellow');
+					return json(c, 429, { error: 'Too many requests. Please try again later.' });
+				}
+			} catch (error) {
+				LoggerModule('Security', `Rate limit Redis error for IP ${ip}: ${error instanceof Error ? error.message : 'Unknown'}`, 'red');
+				this.manager.prometheus.recordError('rate_limit_redis_error', 'routes');
+				return json(c, 503, { error: 'Service temporarily unavailable.' });
 			}
 
 			return next();
