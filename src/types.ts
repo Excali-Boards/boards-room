@@ -20,6 +20,8 @@ export type WebResponse<T, S extends StatusWebCode = StatusWebCode> =
 export type CancelOutWebResponses<T extends WebResponse<unknown, StatusWebCode>> = T extends { status: 200, data: infer U } ? U : never;
 export type NonUndefined<T> = T extends undefined ? never : T;
 
+export type HeaderGetter = (name: string) => string | undefined;
+
 export type Simplify<T> = {
 	[P in keyof T]: T[P];
 };

@@ -1,9 +1,9 @@
 import { ActionType, BareBoard, ClientToServerEvents, FileActionData, RoomData, ServerToClientEvents, SnapshotData } from '../types.js';
 import { getSceneVersion, isInitializedImageElement, newElementWith, reconcileElements } from '../other/excalidraw.js';
+import { compressionUtils, resolveClientIp } from '../modules/functions.js';
 import { DBUserPartial, DBUserPartialType } from '../other/vars.js';
 import { hasAccessToBoardWithIds } from '../other/permissions.js';
 import { performanceConstants } from '../core/constants.js';
-import { compressionUtils } from '../modules/functions.js';
 import { RoomSnapshot, TLSocketRoom } from '@tldraw/sync';
 import { SocketId } from '@excalidraw/excalidraw/types';
 import { serve, ServerType } from '@hono/node-server';
@@ -61,6 +61,11 @@ export default class SocketServer {
 
 	private handleConnection(): void {
 		this.io.on('connection', async (socket) => {
+			if (config.rateLimiting.enabled) {
+				const allowed = await this.enforceSocketRateLimit(socket);
+				if (!allowed) return socket.disconnect(true);
+			}
+
 			const totalRooms = this.excalidrawSocket.roomData.size + this.tldrawSocket.roomData.size;
 			this.manager.prometheus.updateSocketMetrics(this.io.sockets.sockets.size, totalRooms);
 
@@ -112,6 +117,48 @@ export default class SocketServer {
 				}
 			}
 		});
+	}
+
+	private async enforceSocketRateLimit(socket: Socket<ClientToServerEvents, ServerToClientEvents>): Promise<boolean> {
+		const ip = resolveClientIp((name) => {
+			const headerValue = socket.handshake.headers[name.toLowerCase()];
+			return Array.isArray(headerValue) ? headerValue[0] : headerValue;
+		}, socket.handshake.address || socket.conn.remoteAddress);
+
+		if (!ip) return false;
+		if (!this.manager.cache.isAvailable()) {
+			LoggerModule('Security', 'Socket rate limiting requires Redis/Cache to be enabled and available.', 'red');
+			return true;
+		}
+
+		const { windowMs, maxRequests } = config.rateLimiting.options;
+
+		const now = Date.now();
+		const cacheKey = `ratelimit:socket:${ip}`;
+		const ttlSeconds = Math.ceil(windowMs / 1000);
+
+		try {
+			const cached = await this.manager.cache.get<{ count: number; lastRequest: number; }>(cacheKey);
+			let record = cached || { count: 0, lastRequest: now };
+
+			if (now - record.lastRequest > windowMs) {
+				record = { count: 1, lastRequest: now };
+			} else {
+				record.count++;
+			}
+
+			await this.manager.cache.set(cacheKey, record, ttlSeconds);
+
+			if (record.count > maxRequests) {
+				LoggerModule('Security', `Socket rate limit exceeded for IP: ${ip} (${record.count}/${maxRequests} requests in ${windowMs}ms window)`, 'yellow');
+				return false;
+			}
+		} catch (error) {
+			LoggerModule('Security', `Socket rate limit Redis error for IP ${ip}: ${error instanceof Error ? error.message : 'Unknown'}`, 'red');
+			this.manager.prometheus.recordError('socket_rate_limit_redis_error', 'socket');
+		}
+
+		return true;
 	}
 
 	public async handleFileAction<T extends ActionType>(boardId: string, boardType: BoardType, data: FileActionData<T>): Promise<{ success: number; failed: number; } | string | void> {

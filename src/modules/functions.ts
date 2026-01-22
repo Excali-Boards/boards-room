@@ -1,4 +1,4 @@
-import { GrantedEntry, ResourceId, ResourceTypeGeneric, RoomData } from '../types.js';
+import { GrantedEntry, HeaderGetter, ResourceId, ResourceTypeGeneric, RoomData } from '../types.js';
 import { encode as msgpackEncode, decode as msgpackDecode } from '@msgpack/msgpack';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import { PermissionHierarchy, ResourceRank } from '../other/permissions.js';
@@ -136,6 +136,33 @@ export const securityUtils = {
 
 export function toLowercase<T extends string>(str: T): Lowercase<T> {
 	return str.toLowerCase() as Lowercase<T>;
+}
+
+export function resolveClientIp(getHeader: HeaderGetter, fallback?: string): string | null {
+	const direct = getHeader('cf-connecting-ip')
+		|| getHeader('true-client-ip')
+		|| getHeader('x-real-ip');
+
+	let ip = direct;
+
+	if (!ip) {
+		const forwardedFor = getHeader('x-forwarded-for');
+		if (forwardedFor) ip = forwardedFor.split(',')[0]?.trim();
+	}
+
+	if (!ip) {
+		const forwarded = getHeader('forwarded');
+		const match = forwarded?.split(',')[0]?.match(/for="?([^;"]+)"?/i);
+		if (match?.[1]) ip = match[1].trim();
+	}
+
+	if (!ip && fallback) ip = fallback;
+	if (!ip) return null;
+
+	ip = ip.replace(/^::ffff:/, '').replace(/^\[|\]$/g, '');
+	if (ip.includes(':') && ip.includes('.')) ip = ip.split(':')[0] || ip;
+
+	return ip && ip !== 'unknown' ? ip : null;
 }
 
 export function isDateStringRegex(value: unknown): value is string {

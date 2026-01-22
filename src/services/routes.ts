@@ -1,5 +1,5 @@
+import { resolveClientIp, securityUtils, toLowercase } from '../modules/functions.js';
 import { HonoEnv, RouteType, StatusWebCode, WebResponse } from '../types.js';
-import { securityUtils, toLowercase } from '../modules/functions.js';
 import { securityConstants } from '../core/constants.js';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { DBUserSelectArgs } from '../other/vars.js';
@@ -186,29 +186,13 @@ export default class Routes {
 
 	private rateLimit(options = { windowMs: 60000, maxRequests: 200 }): MiddlewareHandler<HonoEnv> { // 200 requests per minute
 		return async (c, next) => {
-			let ip: string | undefined;
-
-			ip = c.req.header('cf-connecting-ip');
-			if (!ip) ip = c.req.header('x-real-ip');
-
-			if (!ip) {
-				const forwarded = c.req.header('x-forwarded-for');
-				if (forwarded) ip = forwarded.split(',')[0]?.trim();
-			}
-
-			if (!ip) ip = c.req.header('true-client-ip');
-
-			if (!ip) {
-				const info = getConnInfo(c);
-				ip = info.remote.address;
-			}
-
-			if (!ip || ip === 'unknown') return json(c, 403, { error: 'Unable to determine client IP address.' });
-
-			ip = ip.replace(/^::ffff:/, '');
+			const connInfo = getConnInfo(c);
+			const ip = resolveClientIp((name) => c.req.header(name), connInfo.remote.address);
+			if (!ip) return json(c, 403, { error: 'Unable to determine client IP address.' });
 
 			const now = Date.now();
-			const cacheKey = `ratelimit:${ip}`;
+			const routeKey = `${c.req.method}:${routePath(c) || c.req.path}`;
+			const cacheKey = `ratelimit:${routeKey}:${ip}`;
 			const ttlSeconds = Math.ceil(options.windowMs / 1000);
 
 			if (!this.manager.cache.isAvailable()) {
@@ -229,7 +213,7 @@ export default class Routes {
 				await this.manager.cache.set(cacheKey, record, ttlSeconds);
 
 				if (record.count > options.maxRequests) {
-					LoggerModule('Security', `Rate limit exceeded for IP: ${ip} (${record.count}/${options.maxRequests} requests in ${options.windowMs}ms window)`, 'yellow');
+					LoggerModule('Security', `Rate limit exceeded for IP: ${ip} on ${routeKey} (${record.count}/${options.maxRequests} requests in ${options.windowMs}ms window).`, 'yellow');
 					return json(c, 429, { error: 'Too many requests. Please try again later.' });
 				}
 			} catch (error) {
