@@ -124,10 +124,7 @@ export async function updateUserInfo(userId: string, data: Partial<UserInput>) {
 	if (data.platform) {
 		if (!allowedPlatforms.includes(data.platform.toLowerCase() as Lowercase<Platforms>)) throw new Error('Invalid platform.');
 
-		const DBUser = await db(manager, 'user', 'findUnique', {
-			where: { userId },
-			select: { loginMethods: true },
-		});
+		const DBUser = await db(manager, 'user', 'findUnique', { where: { userId }, select: { loginMethods: true } });
 		if (!DBUser) throw new Error('User not found.');
 
 		const platformInfo = DBUser.loginMethods.find((method) => method.platform === data.platform);

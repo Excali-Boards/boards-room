@@ -1,6 +1,7 @@
 import { emailToUserId, parseZodError, securityUtils } from '../modules/functions.js';
-import { Device, Platforms, RegistrationMethod } from '@prisma/client';
+import { DBUserPartialType, DBUserSelectArgs } from '../other/vars.js';
 import { makeRoute, json } from '../services/routes.js';
+import { Device, Platforms } from '@prisma/client';
 import config from '../core/config.js';
 import { db } from '../core/prisma.js';
 import manager from '../index.js';
@@ -51,8 +52,10 @@ export default [
 			const isValid = sessionSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
-			const DBUser = await createOrLinkUser(isValid.data);
-			if (!DBUser) return json(c, 404, { error: 'User not found or created.' });
+			const DBUser = await createOrLinkUser(isValid.data).catch((err: Error) => err);
+
+			if (!DBUser) return json(c, 404, { error: 'User creation or linking failed.' });
+			else if (DBUser instanceof Error) return json(c, 404, { error: DBUser.message });
 
 			const token = securityUtils.randomString(128);
 			const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -80,6 +83,23 @@ export default [
 					expiresAt,
 				},
 			});
+		},
+	}),
+	makeRoute({
+		path: '/sessions/rotate',
+		method: 'POST',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			const isValid = unlinkLoginMethodSchema.safeParse(await c.req.json().catch(() => ({})));
+			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
+
+			const tryUnlink = await unlinkLoginMethod(c.var.DBUser.userId, isValid.data).catch((err: Error) => err);
+			if (!tryUnlink) return json(c, 404, { error: 'Login method unlinking failed.' });
+			else if (tryUnlink instanceof Error) return json(c, 400, { error: tryUnlink.message });
+
+			return json(c, 200, { data: 'Login method updated.' });
 		},
 	}),
 	makeRoute({
@@ -112,6 +132,7 @@ export default [
 	}),
 ];
 
+// Schemas.
 export type SessionInput = z.infer<typeof sessionSchema>;
 export const sessionSchema = z.object({
 	platform: z.enum(Platforms),
@@ -128,22 +149,74 @@ export const sessionDeleteSchema = z.object({
 	dbId: z.string(),
 });
 
-async function createOrLinkUser({ platform, email, displayName, avatarUrl, currentUserId }: SessionInput) {
+export type UnlinkLoginMethodInput = z.infer<typeof unlinkLoginMethodSchema>;
+export const unlinkLoginMethodSchema = z.object({
+	platform: z.enum(Platforms),
+	email: z.email().optional(),
+	newMainPlatform: z.enum(Platforms).optional(),
+});
+
+// Types and functions.
+export type SessionOutput = Pick<DBUserPartialType, 'userId' | 'email' | 'displayName' | 'avatarUrl'> & {
+	sessions: { dbId: string; lastUsed: Date; }[];
+};
+
+async function createOrLinkUser({ platform, email, displayName, avatarUrl, currentUserId }: SessionInput): Promise<SessionOutput | null> {
 	const encryptedEmail = securityUtils.encrypt(email);
-	avatarUrl = avatarUrl || `https://gravatar.com/avatar/${securityUtils.hash(email)}?d=mp`;
+	const finalAvatarUrl = avatarUrl || `https://gravatar.com/avatar/${securityUtils.hash(email)}?d=mp`;
 
 	const existingLoginMethod = await db(manager, 'loginMethod', 'findUnique', {
 		include: { user: { select: { userId: true, email: true, displayName: true, avatarUrl: true, sessions: { select: { dbId: true, lastUsed: true } } } } },
-		where: {
-			platform_platformEmail: {
-				platform,
-				platformEmail: encryptedEmail,
-			},
-		},
+		where: { platform_platformEmail: { platform, platformEmail: encryptedEmail } },
 	});
 
+	// Link to existing user
 	if (currentUserId) {
-		if (!existingLoginMethod) {
+		if (existingLoginMethod && existingLoginMethod.userId !== currentUserId) {
+			throw new Error('This login method is linked to another user.');
+		}
+
+		const currentUser = await db(manager, 'user', 'findUnique', {
+			where: { userId: currentUserId },
+			select: {
+				userId: true,
+				email: true,
+				displayName: true,
+				avatarUrl: true,
+				mainLoginType: true,
+				sessions: { select: { dbId: true, lastUsed: true } },
+				loginMethods: { select: { dbId: true, platform: true, platformEmail: true } },
+			},
+		});
+
+		if (!currentUser) throw new Error('User not found.');
+
+		const platformMethods = currentUser.loginMethods.filter((m) => m.platform === platform);
+		const primaryMethod = platformMethods[0];
+
+		if (primaryMethod) {
+			if (primaryMethod.platformEmail !== encryptedEmail) {
+				await db(manager, 'loginMethod', 'update', {
+					where: { dbId: primaryMethod.dbId },
+					data: { platformEmail: encryptedEmail },
+				});
+
+				if (currentUser.mainLoginType === platform) {
+					await db(manager, 'user', 'update', {
+						where: { userId: currentUserId },
+						data: { email: encryptedEmail },
+					});
+					currentUser.email = encryptedEmail;
+				}
+			}
+
+			const duplicates = platformMethods.slice(1);
+			if (duplicates.length > 0) {
+				await db(manager, 'loginMethod', 'deleteMany', {
+					where: { dbId: { in: duplicates.map((m) => m.dbId) } },
+				});
+			}
+		} else if (!existingLoginMethod) {
 			await db(manager, 'loginMethod', 'create', {
 				data: {
 					platform,
@@ -151,37 +224,60 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 					user: { connect: { userId: currentUserId } },
 				},
 			});
-
-			return await db(manager, 'user', 'findUnique', {
-				where: { userId: currentUserId },
-				select: { userId: true, email: true, displayName: true, avatarUrl: true, sessions: { select: { dbId: true, lastUsed: true } } },
-			});
-		} else if (existingLoginMethod.userId !== currentUserId) {
-			throw new Error('This login method is linked to another user.');
 		}
 
-		return existingLoginMethod.user;
+		return {
+			userId: currentUser.userId,
+			email: currentUser.email,
+			displayName: currentUser.displayName,
+			avatarUrl: currentUser.avatarUrl,
+			sessions: currentUser.sessions,
+		};
 	}
 
-	if (existingLoginMethod) return existingLoginMethod.user;
+	// Update existing user
+	if (existingLoginMethod) {
+		if (existingLoginMethod.platformEmail !== encryptedEmail) {
+			await db(manager, 'loginMethod', 'update', {
+				where: { dbId: existingLoginMethod.dbId },
+				data: { platformEmail: encryptedEmail },
+			});
+		}
 
+		return await db(manager, 'user', 'update', {
+			where: { userId: existingLoginMethod.userId },
+			data: { mainLoginType: platform, displayName, avatarUrl: finalAvatarUrl, email: encryptedEmail },
+			select: {
+				userId: true,
+				email: true,
+				displayName: true,
+				avatarUrl: true,
+				sessions: { select: { dbId: true, lastUsed: true } },
+			},
+		});
+	}
+
+	// Create new user
 	const user = await db(manager, 'user', 'upsert', {
 		where: { email: encryptedEmail },
 		update: {
 			mainLoginType: platform,
 			displayName,
-			avatarUrl,
+			avatarUrl: finalAvatarUrl,
+			loginMethods: {
+				connectOrCreate: {
+					where: { platform_platformEmail: { platform, platformEmail: encryptedEmail } },
+					create: { platform, platformEmail: encryptedEmail },
+				},
+			},
 		},
 		create: {
 			userId: emailToUserId(encryptedEmail),
 			email: encryptedEmail,
 			mainLoginType: platform,
 			displayName,
-			avatarUrl,
-			registrationMethod: RegistrationMethod.oauth,
-			loginMethods: {
-				create: { platform, platformEmail: encryptedEmail },
-			},
+			avatarUrl: finalAvatarUrl,
+			loginMethods: { create: { platform, platformEmail: encryptedEmail } },
 		},
 		select: {
 			userId: true,
@@ -194,4 +290,22 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 
 	if (!user) throw new Error('Failed to create or update user.');
 	return user;
+}
+
+async function unlinkLoginMethod(userId: string, data: UnlinkLoginMethodInput): Promise<DBUserPartialType | null> {
+	const loginMethods = await db(manager, 'loginMethod', 'findMany', { where: { userId } });
+
+	if (!loginMethods || loginMethods.length === 0) throw new Error('User not found.');
+	if (loginMethods.length <= 1) throw new Error('You must keep at least one login method.');
+
+	const target = loginMethods.find((m) => m.platform === data.platform);
+	if (!target) throw new Error('Login method not found.');
+
+	const user = await db(manager, 'user', 'findUnique', { where: { userId }, select: { mainLoginType: true } });
+	if (!user) throw new Error('User not found.');
+
+	if (user.mainLoginType === target.platform) throw new Error('Cannot unlink your main login method. Change your main login method first.');
+
+	await db(manager, 'loginMethod', 'delete', { where: { dbId: target.dbId } });
+	return await db(manager, 'user', 'findUnique', { where: { userId }, ...DBUserSelectArgs });
 }

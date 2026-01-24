@@ -11,8 +11,7 @@ model User {
     mainLoginType Platforms
     loginMethods  LoginMethod[]
 
-    invitedBy          String?
-    registrationMethod RegistrationMethod @default(direct)
+    invitedBy String?
 
     groupPermissions    GroupPermission[]
     categoryPermissions CategoryPermission[]
