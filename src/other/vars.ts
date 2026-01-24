@@ -9,7 +9,6 @@ export const DBUserSelectArgs = {
 		mainGroupId: true,
 		displayName: true,
 		mainLoginType: true,
-		registrationMethod: true,
 		groupPermissions: { select: { groupId: true, role: true } },
 		categoryPermissions: { select: { categoryId: true, role: true } },
 		boardPermissions: { select: { boardId: true, role: true } },

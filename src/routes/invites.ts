@@ -248,13 +248,10 @@ export default [
 
 			await applyPermissionGrants(manager, permissionResult, DBInvite.createdBy, userId);
 
-			if (c.var.DBUser.registrationMethod === 'direct' || !c.var.DBUser.invitedBy) {
+			if (!c.var.DBUser.invitedBy) {
 				await db(manager, 'user', 'update', {
 					where: { userId },
-					data: {
-						registrationMethod: 'invite',
-						invitedBy: DBInvite.createdBy,
-					},
+					data: { invitedBy: DBInvite.createdBy },
 				}).catch(() => null);
 			}
 
