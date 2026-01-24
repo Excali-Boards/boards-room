@@ -152,8 +152,6 @@ export const sessionDeleteSchema = z.object({
 export type UnlinkLoginMethodInput = z.infer<typeof unlinkLoginMethodSchema>;
 export const unlinkLoginMethodSchema = z.object({
 	platform: z.enum(Platforms),
-	email: z.email().optional(),
-	newMainPlatform: z.enum(Platforms).optional(),
 });
 
 // Types and functions.
