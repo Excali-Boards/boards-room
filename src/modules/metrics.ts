@@ -111,6 +111,11 @@ export class MetricsBase {
 		help: 'Total number of users in database',
 	});
 
+	protected totalFiles = new Gauge({
+		name: 'boards_total_files',
+		help: 'Total number of files in database',
+	});
+
 	protected totalInvites = new Gauge({
 		name: 'boards_total_invites',
 		help: 'Total number of invites in database',
@@ -198,7 +203,8 @@ export default class PrometheusMetrics extends MetricsBase {
 			if (!this.systemStatusData) {
 				this.systemStatusData = {
 					cpuUsage: 0,
-					memoryUsage: '0 MB',
+					memoryUsageMb: 0,
+					uptimeSeconds: 0,
 					activeRooms: 0,
 					socketConnections: 0,
 					queuedFiles: 0,
@@ -207,11 +213,16 @@ export default class PrometheusMetrics extends MetricsBase {
 					totalBoards: 0,
 					totalCategories: 0,
 					totalGroups: 0,
+					totalFiles: 0,
+					storageSizeMb: 0,
 				};
 			}
 
+			const memoryUsageMb = memUsage.rss / (1024 * 1024);
+
 			this.systemStatusData.cpuUsage = parseFloat(stats.cpu.toFixed(2));
-			this.systemStatusData.memoryUsage = (memUsage.rss / (1024 * 1024)).toFixed(2) + ' MB';
+			this.systemStatusData.memoryUsageMb = memoryUsageMb % 1 === 0 ? memoryUsageMb : parseFloat(memoryUsageMb.toFixed(2));
+			this.systemStatusData.uptimeSeconds = process.uptime();
 			this.systemStatusData.activeRooms = this.manager.socket.excalidrawSocket.roomData.size + this.manager.socket.tldrawSocket.roomData.size;
 			this.systemStatusData.socketConnections = this.manager.socket.io.sockets.sockets.size;
 			this.systemStatusData.queuedFiles = this.manager.socket.excalidrawSocket.queuedFiles.size + this.manager.socket.tldrawSocket.queuedFiles.size;
@@ -223,7 +234,8 @@ export default class PrometheusMetrics extends MetricsBase {
 
 	private async getDatabaseMetrics(): Promise<void> {
 		try {
-			const [users, invites, boards, categories, groups] = await Promise.all([
+			const [files, users, invites, boards, categories, groups] = await Promise.all([
+				db(this.manager, 'file', 'aggregate', { _count: { dbId: true }, _sum: { sizeBytes: true } }),
 				db(this.manager, 'user', 'count', {}),
 				db(this.manager, 'invite', 'count', {}),
 				db(this.manager, 'board', 'count', {}),
@@ -236,11 +248,13 @@ export default class PrometheusMetrics extends MetricsBase {
 			this.totalBoards.set(boards || 0);
 			this.totalCategories.set(categories || 0);
 			this.totalGroups.set(groups || 0);
+			this.totalFiles.set(files?._count.dbId || 0);
 
 			if (!this.systemStatusData) {
 				this.systemStatusData = {
 					cpuUsage: 0,
-					memoryUsage: '0 MB',
+					memoryUsageMb: 0,
+					uptimeSeconds: 0,
 					activeRooms: 0,
 					socketConnections: 0,
 					queuedFiles: 0,
@@ -249,14 +263,20 @@ export default class PrometheusMetrics extends MetricsBase {
 					totalBoards: 0,
 					totalCategories: 0,
 					totalGroups: 0,
+					totalFiles: 0,
+					storageSizeMb: 0,
 				};
 			}
+
+			const storageSizeMb = files?._sum.sizeBytes ? files._sum.sizeBytes / (1024 * 1024) : 0;
 
 			this.systemStatusData.totalUsers = users || 0;
 			this.systemStatusData.totalInvites = invites || 0;
 			this.systemStatusData.totalBoards = boards || 0;
 			this.systemStatusData.totalCategories = categories || 0;
 			this.systemStatusData.totalGroups = groups || 0;
+			this.systemStatusData.totalFiles = files?._count.dbId || 0;
+			this.systemStatusData.storageSizeMb = storageSizeMb % 1 === 0 ? storageSizeMb : parseFloat(storageSizeMb.toFixed(2));
 		} catch (error) {
 			this.recordError('db_metrics_collection', 'metrics');
 			LoggerModule('Metrics', `Error collecting database metrics: ${error}`, 'red');

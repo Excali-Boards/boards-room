@@ -17,5 +17,41 @@ export const DBUserSelectArgs = {
 	},
 } satisfies Prisma.UserDefaultArgs;
 
+export const DBUserAnalyticsArgs = {
+	select: {
+		totalSessions: true,
+		totalActiveSeconds: true,
+		lastActivityAt: true,
+		user: {
+			select: {
+				userId: true,
+				displayName: true,
+				avatarUrl: true,
+			},
+		},
+		board: {
+			select: {
+				boardId: true,
+				name: true,
+				category: {
+					select: {
+						categoryId: true,
+						name: true,
+						group: {
+							select: {
+								groupId: true,
+								name: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+};
+
 export const DBUserPartial = Prisma.validator<Prisma.UserDefaultArgs>()(DBUserSelectArgs);
 export type DBUserPartialType = Prisma.UserGetPayload<typeof DBUserPartial>;
+
+export const DBUserAnalytics = Prisma.validator<Prisma.UserBoardActivityDefaultArgs>()(DBUserAnalyticsArgs);
+export type DBUserAnalyticsType = Prisma.UserBoardActivityGetPayload<typeof DBUserAnalytics>;

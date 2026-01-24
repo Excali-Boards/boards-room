@@ -27,25 +27,41 @@ pnpm install
 
 ### 2. Configure environment
 
-Create a `.env` file with the following variables:
+Create a `.env` file (or copy `example.env`) with the following variables:
 
 ```env
-# Allowed Origins
+# Allowed origins (comma-separated)
 ALLOWED_ORIGINS="http://localhost:3002"
 
-# API Auth
+# API auth
 API_TOKEN="your-api-token"           # Shared token with frontend
 DEVELOPERS="admin@example.com"       # Comma-separated admin user emails
 
-# Server Settings
+# Server settings
 PORT=3004
 DATABASE_URL="your-database-url"
 
-# S3 Storage
+# Database connection pooling
+DB_POOL_MIN=2
+DB_POOL_MAX=10
+
+# Valkey/Redis cache
+CACHE_HOST=localhost
+CACHE_PORT=6379
+CACHE_PASSWORD=
+CACHE_DB=0
+CACHE_DEFAULT_TTL=300
+
+# S3 storage
 S3_ENDPOINT="https://s3.example.com"
 S3_ACCESS_KEY="your-access-key"
 S3_SECRET_KEY="your-secret-key"
 S3_BUCKET="your-bucket-name"
+
+# Rate limiting (optional)
+RATE_LIMITING_ENABLED=false
+RATE_LIMITING_WINDOW_MS=60000
+RATE_LIMITING_MAX_REQUESTS=100
 ```
 
 > 🔐 **Note:** The `API_TOKEN` is required for all communication between frontend and backend. Keep it secret.

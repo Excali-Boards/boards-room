@@ -1,9 +1,26 @@
 import { json, makeRoute } from '../services/routes.js';
+import { DBUserAnalyticsArgs } from '../other/vars.js';
 import { canManage } from '../other/permissions.js';
 import { db } from '../core/prisma.js';
 import manager from '../index.js';
 
 export default [
+	makeRoute({
+		path: '/analytics',
+		method: 'GET',
+		enabled: true,
+		devOnly: true,
+		auth: true,
+
+		handler: async (c) => {
+			const activities = await db(manager, 'userBoardActivity', 'findMany', {
+				orderBy: { lastActivityAt: 'desc' },
+				...DBUserAnalyticsArgs,
+			}) || [];
+
+			return json(c, 200, { data: activities });
+		},
+	}),
 	makeRoute({
 		path: '/analytics/user',
 		method: 'GET',
@@ -18,24 +35,7 @@ export default [
 					totalSessions: true,
 					totalActiveSeconds: true,
 					lastActivityAt: true,
-					board: {
-						select: {
-							boardId: true,
-							name: true,
-							category: {
-								select: {
-									categoryId: true,
-									name: true,
-									group: {
-										select: {
-											groupId: true,
-											name: true,
-										},
-									},
-								},
-							},
-						},
-					},
+					board: DBUserAnalyticsArgs.select.board,
 				},
 			}) || [];
 
@@ -59,36 +59,7 @@ export default [
 			const activities = await db(manager, 'userBoardActivity', 'findMany', {
 				where: { boardId },
 				orderBy: { lastActivityAt: 'desc' },
-				select: {
-					totalSessions: true,
-					totalActiveSeconds: true,
-					lastActivityAt: true,
-					user: {
-						select: {
-							userId: true,
-							displayName: true,
-							avatarUrl: true,
-						},
-					},
-					board: {
-						select: {
-							boardId: true,
-							name: true,
-							category: {
-								select: {
-									categoryId: true,
-									name: true,
-									group: {
-										select: {
-											groupId: true,
-											name: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				...DBUserAnalyticsArgs,
 			}) || [];
 
 			return json(c, 200, { data: activities });
@@ -110,36 +81,7 @@ export default [
 			const activities = await db(manager, 'userBoardActivity', 'findMany', {
 				where: { board: { categoryId } },
 				orderBy: { lastActivityAt: 'desc' },
-				select: {
-					totalSessions: true,
-					totalActiveSeconds: true,
-					lastActivityAt: true,
-					user: {
-						select: {
-							userId: true,
-							displayName: true,
-							avatarUrl: true,
-						},
-					},
-					board: {
-						select: {
-							boardId: true,
-							name: true,
-							category: {
-								select: {
-									categoryId: true,
-									name: true,
-									group: {
-										select: {
-											groupId: true,
-											name: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				...DBUserAnalyticsArgs,
 			}) || [];
 
 			return json(c, 200, { data: activities });
@@ -160,40 +102,10 @@ export default [
 			const activities = await db(manager, 'userBoardActivity', 'findMany', {
 				where: { board: { category: { groupId } } },
 				orderBy: { lastActivityAt: 'desc' },
-				select: {
-					totalSessions: true,
-					totalActiveSeconds: true,
-					lastActivityAt: true,
-					user: {
-						select: {
-							userId: true,
-							displayName: true,
-							avatarUrl: true,
-						},
-					},
-					board: {
-						select: {
-							boardId: true,
-							name: true,
-							category: {
-								select: {
-									categoryId: true,
-									name: true,
-									group: {
-										select: {
-											groupId: true,
-											name: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				...DBUserAnalyticsArgs,
 			}) || [];
 
 			return json(c, 200, { data: activities });
 		},
 	}),
 ];
-
