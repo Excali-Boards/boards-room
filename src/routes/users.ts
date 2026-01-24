@@ -124,14 +124,37 @@ export async function updateUserInfo(userId: string, data: Partial<UserInput>) {
 	if (data.platform) {
 		if (!allowedPlatforms.includes(data.platform.toLowerCase() as Lowercase<Platforms>)) throw new Error('Invalid platform.');
 
-		const DBUser = await db(manager, 'user', 'findUnique', { where: { userId }, select: { loginMethods: true } });
+		const DBUser = await db(manager, 'user', 'findUnique', { where: { userId }, select: { email: true, mainLoginType: true, loginMethods: true } });
 		if (!DBUser) throw new Error('User not found.');
 
-		const platformInfo = DBUser.loginMethods.find((method) => method.platform === data.platform);
-		if (!platformInfo) throw new Error('You must connect to the platform you want to set as main first.');
+		if (DBUser.mainLoginType !== data.platform) {
+			const platformInfo = DBUser.loginMethods.find((method) => method.platform === data.platform);
+			if (!platformInfo) throw new Error('You must connect to the platform you want to set as main first.');
 
-		updateData.email = platformInfo.platformEmail;
-		updateData.mainLoginType = data.platform;
+			updateData.email = platformInfo.platformEmail;
+			updateData.mainLoginType = data.platform;
+
+			await db(manager, 'loginMethod', 'deleteMany', {
+				where: { userId, platform: data.platform },
+			});
+
+			const previousMainPlatform = DBUser.mainLoginType;
+			const previousMainEmail = DBUser.email;
+			const existingPrevious = DBUser.loginMethods.find(
+				(method) => method.platform === previousMainPlatform && method.platformEmail === previousMainEmail,
+			);
+
+			if (!existingPrevious) {
+				await db(manager, 'loginMethod', 'create', {
+					data: { platform: previousMainPlatform, platformEmail: previousMainEmail, user: { connect: { userId } } },
+				});
+			}
+		} else {
+			await db(manager, 'loginMethod', 'deleteMany', {
+				where: { userId, platform: data.platform },
+			});
+		}
+
 	}
 
 	if (data.mainGroupId !== undefined) {

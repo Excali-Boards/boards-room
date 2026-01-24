@@ -165,8 +165,13 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 	const encryptedEmail = securityUtils.encrypt(email);
 	const finalAvatarUrl = avatarUrl || `https://gravatar.com/avatar/${securityUtils.hash(email)}?d=mp`;
 
+	const userByEmail = await db(manager, 'user', 'findUnique', {
+		where: { email: encryptedEmail },
+		select: { userId: true, email: true, displayName: true, avatarUrl: true, mainLoginType: true, sessions: { select: { dbId: true, lastUsed: true } } },
+	});
+
 	const existingLoginMethod = await db(manager, 'loginMethod', 'findUnique', {
-		include: { user: { select: { userId: true, email: true, displayName: true, avatarUrl: true, sessions: { select: { dbId: true, lastUsed: true } } } } },
+		include: { user: { select: { userId: true, email: true, displayName: true, avatarUrl: true, mainLoginType: true, sessions: { select: { dbId: true, lastUsed: true } } } } },
 		where: { platform_platformEmail: { platform, platformEmail: encryptedEmail } },
 	});
 
@@ -174,6 +179,10 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 	if (currentUserId) {
 		if (existingLoginMethod && existingLoginMethod.userId !== currentUserId) {
 			throw new Error('This login method is linked to another user.');
+		}
+
+		if (userByEmail && userByEmail.userId !== currentUserId) {
+			throw new Error('This email is already used by another user.');
 		}
 
 		const currentUser = await db(manager, 'user', 'findUnique', {
@@ -191,39 +200,45 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 
 		if (!currentUser) throw new Error('User not found.');
 
-		const platformMethods = currentUser.loginMethods.filter((m) => m.platform === platform);
-		const primaryMethod = platformMethods[0];
-
-		if (primaryMethod) {
-			if (primaryMethod.platformEmail !== encryptedEmail) {
-				await db(manager, 'loginMethod', 'update', {
-					where: { dbId: primaryMethod.dbId },
-					data: { platformEmail: encryptedEmail },
+		if (currentUser.mainLoginType === platform) {
+			if (currentUser.email !== encryptedEmail) {
+				await db(manager, 'user', 'update', {
+					where: { userId: currentUserId },
+					data: { email: encryptedEmail },
 				});
-
-				if (currentUser.mainLoginType === platform) {
-					await db(manager, 'user', 'update', {
-						where: { userId: currentUserId },
-						data: { email: encryptedEmail },
-					});
-					currentUser.email = encryptedEmail;
-				}
+				currentUser.email = encryptedEmail;
 			}
 
-			const duplicates = platformMethods.slice(1);
-			if (duplicates.length > 0) {
-				await db(manager, 'loginMethod', 'deleteMany', {
-					where: { dbId: { in: duplicates.map((m) => m.dbId) } },
-				});
-			}
-		} else if (!existingLoginMethod) {
-			await db(manager, 'loginMethod', 'create', {
-				data: {
-					platform,
-					platformEmail: encryptedEmail,
-					user: { connect: { userId: currentUserId } },
-				},
+			await db(manager, 'loginMethod', 'deleteMany', {
+				where: { userId: currentUserId, platform },
 			});
+		} else {
+			const platformMethods = currentUser.loginMethods.filter((m) => m.platform === platform);
+			const primaryMethod = platformMethods[0];
+
+			if (primaryMethod) {
+				if (primaryMethod.platformEmail !== encryptedEmail) {
+					await db(manager, 'loginMethod', 'update', {
+						where: { dbId: primaryMethod.dbId },
+						data: { platformEmail: encryptedEmail },
+					});
+				}
+
+				const duplicates = platformMethods.slice(1);
+				if (duplicates.length > 0) {
+					await db(manager, 'loginMethod', 'deleteMany', {
+						where: { dbId: { in: duplicates.map((m) => m.dbId) } },
+					});
+				}
+			} else if (!existingLoginMethod) {
+				await db(manager, 'loginMethod', 'create', {
+					data: {
+						platform,
+						platformEmail: encryptedEmail,
+						user: { connect: { userId: currentUserId } },
+					},
+				});
+			}
 		}
 
 		return {
@@ -235,18 +250,11 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 		};
 	}
 
-	// Update existing user
-	if (existingLoginMethod) {
-		if (existingLoginMethod.platformEmail !== encryptedEmail) {
-			await db(manager, 'loginMethod', 'update', {
-				where: { dbId: existingLoginMethod.dbId },
-				data: { platformEmail: encryptedEmail },
-			});
-		}
-
+	// Login with main method
+	if (userByEmail && userByEmail.mainLoginType === platform) {
 		return await db(manager, 'user', 'update', {
-			where: { userId: existingLoginMethod.userId },
-			data: { mainLoginType: platform, displayName, avatarUrl: finalAvatarUrl, email: encryptedEmail },
+			where: { userId: userByEmail.userId },
+			data: { displayName, avatarUrl: finalAvatarUrl },
 			select: {
 				userId: true,
 				email: true,
@@ -257,27 +265,38 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 		});
 	}
 
-	// Create new user
-	const user = await db(manager, 'user', 'upsert', {
-		where: { email: encryptedEmail },
-		update: {
-			mainLoginType: platform,
-			displayName,
-			avatarUrl: finalAvatarUrl,
-			loginMethods: {
-				connectOrCreate: {
-					where: { platform_platformEmail: { platform, platformEmail: encryptedEmail } },
-					create: { platform, platformEmail: encryptedEmail },
-				},
+	// Login with linked method
+	if (existingLoginMethod) {
+		if (existingLoginMethod.platformEmail !== encryptedEmail) {
+			await db(manager, 'loginMethod', 'update', {
+				where: { dbId: existingLoginMethod.dbId },
+				data: { platformEmail: encryptedEmail },
+			});
+		}
+
+		return await db(manager, 'user', 'update', {
+			where: { userId: existingLoginMethod.userId },
+			data: { displayName, avatarUrl: finalAvatarUrl },
+			select: {
+				userId: true,
+				email: true,
+				displayName: true,
+				avatarUrl: true,
+				sessions: { select: { dbId: true, lastUsed: true } },
 			},
-		},
-		create: {
+		});
+	}
+
+	if (userByEmail) throw new Error('This account is not linked to that platform. Link it first.');
+
+	// Create new user
+	const user = await db(manager, 'user', 'create', {
+		data: {
 			userId: emailToUserId(encryptedEmail),
 			email: encryptedEmail,
 			mainLoginType: platform,
 			displayName,
 			avatarUrl: finalAvatarUrl,
-			loginMethods: { create: { platform, platformEmail: encryptedEmail } },
 		},
 		select: {
 			userId: true,
@@ -296,7 +315,6 @@ async function unlinkLoginMethod(userId: string, data: UnlinkLoginMethodInput): 
 	const loginMethods = await db(manager, 'loginMethod', 'findMany', { where: { userId } });
 
 	if (!loginMethods || loginMethods.length === 0) throw new Error('User not found.');
-	if (loginMethods.length <= 1) throw new Error('You must keep at least one login method.');
 
 	const target = loginMethods.find((m) => m.platform === data.platform);
 	if (!target) throw new Error('Login method not found.');
