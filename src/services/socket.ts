@@ -463,7 +463,7 @@ export class ExcalidrawSocket {
 	}
 
 	private async saveRoom(boardId: string, data: SnapshotData): Promise<void> {
-		const current = await this.getRoomData(boardId);
+		const current = this.roomData.get(boardId);
 		if (!current) return;
 
 		const reconciled = reconcileElements(current.elements, data.elements);
@@ -566,8 +566,8 @@ export class TldrawSocket {
 					onSessionRemoved: () => {
 						this.roomData.delete(room);
 					},
-					onDataChange: async () => {
-						const current = await this.getRoomData(room);
+					onDataChange: () => {
+						const current = this.roomData.get(room);
 						if (!current) return;
 
 						this.roomData.set(room, { ...current, needsPersist: true });
@@ -597,8 +597,8 @@ export class TldrawSocket {
 					onSessionRemoved: (room, args) => {
 						if (!args.numSessionsRemaining) room.close();
 					},
-					onDataChange: async () => {
-						const current = await this.getRoomData(DBBoard.boardId);
+					onDataChange: () => {
+						const current = this.roomData.get(DBBoard.boardId);
 						if (!current) return;
 
 						this.roomData.set(DBBoard.boardId, { ...current, needsPersist: true });
