@@ -322,6 +322,14 @@ export type ClientToServerEvents = {
 	presenceUpdate: (data: PresenceUpdatePayload) => unknown;
 };
 
+export type S3HealthStatus = {
+	isHealthy: boolean;
+	lastCheckedAt: number;
+	lastHealthyAt: number | null;
+	consecutiveFailures: number;
+	lastError: string | null;
+};
+
 export type SystemStatus = {
 	cpuUsage: number;
 	memoryUsageMb: number;
@@ -340,4 +348,6 @@ export type SystemStatus = {
 
 	totalFiles: number;
 	storageSizeMb: number;
+
+	s3: S3HealthStatus;
 };

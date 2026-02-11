@@ -18,7 +18,7 @@ export default class Utils {
 	constructor (readonly manager: BoardsManager) { }
 
 	public async init(): Promise<void> {
-		setInterval(async () => this.performCleanup(), 1000 * 60 * 30);
+		setInterval(() => void this.performCleanup().catch(() => null), 1000 * 60 * 30);
 	}
 
 	private async performCleanup(): Promise<void> {
@@ -46,8 +46,8 @@ export default class Utils {
 				where: { boardIds: { has: board.boardId } },
 			}) || [];
 
-			this.manager.files.deleteBoardFile(board.boardId);
-			this.manager.files.deleteMediaFiles(board.boardId, board.files.map((file) => file.fileId));
+			await this.manager.files.deleteBoardFile(board.boardId).catch(() => null);
+			await this.manager.files.deleteMediaFiles(board.boardId, board.files.map((file) => file.fileId)).catch(() => null);
 
 			const boardDeleted = await db(this.manager, 'board', 'delete', { where: { boardId: board.boardId } }).catch(() => null);
 			if (!boardDeleted) return false;

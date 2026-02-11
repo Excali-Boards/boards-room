@@ -215,6 +215,7 @@ export default class PrometheusMetrics extends MetricsBase {
 					totalGroups: 0,
 					totalFiles: 0,
 					storageSizeMb: 0,
+					s3: this.manager.files.getS3HealthStatus(),
 				};
 			}
 
@@ -265,6 +266,7 @@ export default class PrometheusMetrics extends MetricsBase {
 					totalGroups: 0,
 					totalFiles: 0,
 					storageSizeMb: 0,
+					s3: this.manager.files.getS3HealthStatus(),
 				};
 			}
 

@@ -1,6 +1,7 @@
 import { DeleteObjectCommand, DeleteObjectCommandOutput, GetObjectCommand, GetObjectCommandOutput, HeadObjectCommand, HeadObjectCommandOutput, ListObjectsV2Command, ListObjectsV2Output, PutObjectCommand, PutObjectCommandOutput, S3Client } from '@aws-sdk/client-s3';
+import { S3HealthStatus, UploadFile, WebResponse } from '../types.js';
 import { db, invalidateCacheForWrite } from '../core/prisma.js';
-import { UploadFile, WebResponse } from '../types.js';
+import LoggerModule from '../modules/logger.js';
 import { BoardsManager } from '../index.js';
 import config from '../core/config.js';
 import { Readable } from 'node:stream';
@@ -21,7 +22,34 @@ class BaseFiles {
 		maxAttempts: 3,
 	});
 
+	private s3Health: S3HealthStatus = {
+		isHealthy: false,
+		lastCheckedAt: 0,
+		lastHealthyAt: null,
+		consecutiveFailures: 0,
+		lastError: null,
+	};
+
 	constructor (protected manager: BoardsManager) { }
+
+	private parseS3Error(error: unknown): string {
+		const message = error instanceof Error ? error.message : String(error);
+		const metadata = error && typeof error === 'object' && '$metadata' in error ? (error as { $metadata?: { httpStatusCode?: number; }; }).$metadata : undefined;
+		const statusCode = metadata?.httpStatusCode;
+
+		if (statusCode === 403 && (
+			message.includes('boolean attribute \'defer\' is not allowed') ||
+			message.includes('char \'&\' is not expected')
+		)) {
+			return 'HTTP 403 with non-XML response from S3 endpoint (likely HTML/proxy/auth response).';
+		}
+
+		return statusCode ? `HTTP ${statusCode}: ${message}` : message;
+	}
+
+	public getS3HealthStatus(): S3HealthStatus {
+		return { ...this.s3Health };
+	}
 
 	// Utilities.
 	public dataURLToBuffer(dataURL: string): Buffer {
@@ -136,6 +164,9 @@ class BaseFiles {
 			return result;
 		} catch (error) {
 			this.manager.prometheus.recordFileOperation('upload', 'error');
+			this.manager.prometheus.recordError('s3_upload_failed', 'files');
+
+			LoggerModule('S3', `Upload failed for key "${key}": ${this.parseS3Error(error)}`, 'red');
 			throw error;
 		}
 	}
@@ -163,7 +194,7 @@ class BaseFiles {
 
 		const totalSize = boardFileSize + (mediaFilesSize?._sum.sizeBytes || 0);
 
-		await db(this.manager, 'board', 'update', {
+		await db(this.manager, 'board', 'updateMany', {
 			where: { boardId },
 			data: { totalSizeBytes: totalSize },
 		});

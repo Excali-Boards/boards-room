@@ -38,8 +38,11 @@ export default [
 			if (!newBoard) return json(c, 500, { error: 'Failed to create board.' });
 
 			const compressed = compressionUtils.compressAndEncrypt(newBoard.type === 'Excalidraw' ? [] : {});
-			const uploaded = await manager.files.uploadBoardFile(newBoard.boardId, compressed, 'application/octet-stream');
-			if (!uploaded) return json(c, 500, { error: 'Failed to upload board file.' });
+			const uploaded = await manager.files.uploadBoardFile(newBoard.boardId, compressed, 'application/octet-stream').catch(() => null);
+			if (!uploaded) {
+				await db(manager, 'board', 'deleteMany', { where: { boardId: newBoard.boardId } }).catch(() => null);
+				return json(c, 500, { error: 'Failed to upload board file.' });
+			}
 
 			return json(c, 200, { data: 'Board created successfully.' });
 		},

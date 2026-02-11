@@ -155,7 +155,7 @@ export default class Routes {
 			});
 
 			if (!session || session.expiresAt < new Date()) {
-				if (session) await db(this.manager, 'session', 'delete', { where: { token: authHeader } });
+				if (session) await db(this.manager, 'session', 'deleteMany', { where: { token: authHeader } }).catch(() => null);
 				return json(c, 401, { error: 'Unauthorized.' });
 			}
 
@@ -170,7 +170,7 @@ export default class Routes {
 			}
 
 			if (Object.keys(updateData).length > 0) {
-				db(this.manager, 'session', 'update', { where: { token: authHeader }, data: updateData }).catch(() => null);
+				db(this.manager, 'session', 'updateMany', { where: { token: authHeader }, data: updateData }).catch(() => null);
 			}
 
 			const isDev = config.developers.includes(securityUtils.decrypt(session.user.email));

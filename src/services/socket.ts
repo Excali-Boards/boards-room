@@ -51,7 +51,12 @@ export default class SocketServer {
 	}
 
 	private async initSavingBoards(): Promise<void> {
-		setInterval(async () => this.saveAllBoards(), performanceConstants.socketSaveIntervalMs);
+		setInterval(() => {
+			void this.saveAllBoards().catch((error) => {
+				this.manager.prometheus.recordError('board_save_cycle_error', 'socket');
+				LoggerModule('Socket', `Periodic board save failed: ${error}`, 'red');
+			});
+		}, performanceConstants.socketSaveIntervalMs);
 	}
 
 	public async saveAllBoards(): Promise<void> {
@@ -61,60 +66,66 @@ export default class SocketServer {
 
 	private handleConnection(): void {
 		this.io.on('connection', async (socket) => {
-			if (config.rateLimiting.enabled) {
-				const allowed = await this.enforceSocketRateLimit(socket);
-				if (!allowed) return socket.disconnect(true);
-			}
-
-			const totalRooms = this.excalidrawSocket.roomData.size + this.tldrawSocket.roomData.size;
-			this.manager.prometheus.updateSocketMetrics(this.io.sockets.sockets.size, totalRooms);
-
-			const token = socket.handshake.auth.token as string;
-			const targetRoom = socket.handshake.auth.room as string;
-			if (!token || !targetRoom) return socket.disconnect(true);
-
-			const DBUser = await db(this.manager, 'user', 'findFirst', { where: { sessions: { some: { token } } }, ...DBUserPartial });
-			if (!DBUser) return socket.disconnect(true);
-
-			const DBBoard = await db(this.manager, 'board', 'findUnique', { where: { boardId: targetRoom }, select: { files: true, boardId: true, version: true, type: true, category: { select: { groupId: true } }, categoryId: true } });
-			if (!DBBoard) return socket.disconnect(true);
-
-			const access = hasAccessToBoardWithIds(DBUser, DBBoard.boardId, DBBoard.categoryId, DBBoard.category.groupId);
-			if (!access.hasAccess) return socket.disconnect(true);
-
-			this.manager.prometheus.startUserSession(DBUser.userId, DBBoard.boardId, socket.id);
-
-			const disconnectTimeout = setTimeout(() => {
-				socket.disconnect(true);
-				this.connectionTimes.delete(socket.id);
-			}, 4 * 60 * 60 * 1000);
-
-			this.connectionTimes.set(socket.id, disconnectTimeout);
-
-			switch (DBBoard.type) {
-				case 'Excalidraw': {
-					return this.excalidrawSocket.setupSocket(socket, {
-						boardId: DBBoard.boardId,
-						files: DBBoard.files.map((f) => f.fileId),
-						version: DBBoard.version || 0,
-						canEdit: access.canEdit,
-						boardType: 'Excalidraw',
-					}, DBUser);
+			try {
+				if (config.rateLimiting.enabled) {
+					const allowed = await this.enforceSocketRateLimit(socket);
+					if (!allowed) return socket.disconnect(true);
 				}
-				case 'Tldraw': {
-					return this.tldrawSocket.setupSocket(socket, {
-						boardId: DBBoard.boardId,
-						files: DBBoard.files.map((f) => f.fileId),
-						version: DBBoard.version || 0,
-						canEdit: access.canEdit,
-						boardType: 'Tldraw',
-					}, DBUser);
-				}
-				default: {
-					LoggerModule('Socket', `Connection rejected: Unsupported board type: ${DBBoard.type}. Socket: ${socket.id}`, 'red');
+
+				const totalRooms = this.excalidrawSocket.roomData.size + this.tldrawSocket.roomData.size;
+				this.manager.prometheus.updateSocketMetrics(this.io.sockets.sockets.size, totalRooms);
+
+				const token = socket.handshake.auth.token as string;
+				const targetRoom = socket.handshake.auth.room as string;
+				if (!token || !targetRoom) return socket.disconnect(true);
+
+				const DBUser = await db(this.manager, 'user', 'findFirst', { where: { sessions: { some: { token } } }, ...DBUserPartial });
+				if (!DBUser) return socket.disconnect(true);
+
+				const DBBoard = await db(this.manager, 'board', 'findUnique', { where: { boardId: targetRoom }, select: { files: true, boardId: true, version: true, type: true, category: { select: { groupId: true } }, categoryId: true } });
+				if (!DBBoard) return socket.disconnect(true);
+
+				const access = hasAccessToBoardWithIds(DBUser, DBBoard.boardId, DBBoard.categoryId, DBBoard.category.groupId);
+				if (!access.hasAccess) return socket.disconnect(true);
+
+				this.manager.prometheus.startUserSession(DBUser.userId, DBBoard.boardId, socket.id);
+
+				const disconnectTimeout = setTimeout(() => {
 					socket.disconnect(true);
-					return;
+					this.connectionTimes.delete(socket.id);
+				}, 4 * 60 * 60 * 1000);
+
+				this.connectionTimes.set(socket.id, disconnectTimeout);
+
+				switch (DBBoard.type) {
+					case 'Excalidraw': {
+						return this.excalidrawSocket.setupSocket(socket, {
+							boardId: DBBoard.boardId,
+							files: DBBoard.files.map((f) => f.fileId),
+							version: DBBoard.version || 0,
+							canEdit: access.canEdit,
+							boardType: 'Excalidraw',
+						}, DBUser);
+					}
+					case 'Tldraw': {
+						return this.tldrawSocket.setupSocket(socket, {
+							boardId: DBBoard.boardId,
+							files: DBBoard.files.map((f) => f.fileId),
+							version: DBBoard.version || 0,
+							canEdit: access.canEdit,
+							boardType: 'Tldraw',
+						}, DBUser);
+					}
+					default: {
+						LoggerModule('Socket', `Connection rejected: Unsupported board type: ${DBBoard.type}. Socket: ${socket.id}`, 'red');
+						socket.disconnect(true);
+						return;
+					}
 				}
+			} catch (error) {
+				this.manager.prometheus.recordError('socket_connection_error', 'socket');
+				LoggerModule('Socket', `Connection setup failed for socket ${socket.id}: ${error}`, 'red');
+				socket.disconnect(true);
 			}
 		});
 	}
@@ -343,7 +354,10 @@ export class ExcalidrawSocket {
 		socket.on('disconnect', async () => {
 			clearTimeout(this.socket.connectionTimes.get(socket.id));
 
-			await this.socket.manager.prometheus.endUserSession(socket.id);
+			await this.socket.manager.prometheus.endUserSession(socket.id).catch((error) => {
+				this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+				LoggerModule('Socket', `Failed to end user session for board ${DBBoard.boardId}: ${error}`, 'red');
+			});
 
 			const totalRooms = this.roomData.size + this.socket.tldrawSocket.roomData.size;
 			this.socket.manager.prometheus.updateSocketMetrics(this.socket.io.sockets.sockets.size - 1, totalRooms);
@@ -352,27 +366,41 @@ export class ExcalidrawSocket {
 			socket.leave(DBBoard.boardId);
 			socket.removeAllListeners();
 
-			const updatedRoom = await this.getRoomData(DBBoard.boardId);
+			const updatedRoom = this.roomData.get(DBBoard.boardId);
 			if (!updatedRoom) return;
 
 			updatedRoom.collaborators.delete(socket.id as SocketId);
 
-			if (updatedRoom.collaborators.size) this.roomData.set(DBBoard.boardId, updatedRoom);
-			else {
-				await this.saveSpecificBoard(DBBoard.boardId);
-
-				const queued = this.queuedFiles.get(DBBoard.boardId);
-				if (queued) {
-					if (queued.length) await this.socket.manager.files.deleteMediaFiles(DBBoard.boardId, queued);
-					await this.socket.manager.files.deleteUnusedFiles(DBBoard.boardId);
-					this.queuedFiles.delete(DBBoard.boardId);
-				}
-
-				this.roomData.delete(DBBoard.boardId);
-				this.socket.io.in(DBBoard.boardId).disconnectSockets();
+			if (updatedRoom.collaborators.size) {
+				this.roomData.set(DBBoard.boardId, updatedRoom);
+				this.socket.io.to(DBBoard.boardId).emit('setCollaborators', Array.from(updatedRoom.collaborators.values()));
+				return;
 			}
 
-			this.socket.io.to(DBBoard.boardId).emit('setCollaborators', Array.from(updatedRoom.collaborators.values()));
+			await this.saveSpecificBoard(DBBoard.boardId).catch((error) => {
+				this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+				LoggerModule('Socket', `Failed to save board ${DBBoard.boardId} during disconnect cleanup: ${error}`, 'red');
+			});
+
+			const queued = this.queuedFiles.get(DBBoard.boardId);
+			if (queued) {
+				if (queued.length) {
+					await this.socket.manager.files.deleteMediaFiles(DBBoard.boardId, queued).catch((error) => {
+						this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+						LoggerModule('Socket', `Failed to delete queued media files for board ${DBBoard.boardId}: ${error}`, 'red');
+					});
+				}
+
+				await this.socket.manager.files.deleteUnusedFiles(DBBoard.boardId).catch((error) => {
+					this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+					LoggerModule('Socket', `Failed to delete unused files for board ${DBBoard.boardId}: ${error}`, 'red');
+				});
+
+				this.queuedFiles.delete(DBBoard.boardId);
+			}
+
+			this.roomData.delete(DBBoard.boardId);
+			this.socket.io.in(DBBoard.boardId).disconnectSockets();
 		});
 
 		socket.on('broadcastScene', (data) => {
@@ -616,7 +644,10 @@ export class TldrawSocket {
 		socket.on('disconnect', async () => {
 			clearTimeout(this.socket.connectionTimes.get(socket.id));
 
-			await this.socket.manager.prometheus.endUserSession(socket.id);
+			await this.socket.manager.prometheus.endUserSession(socket.id).catch((error) => {
+				this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+				LoggerModule('Socket', `Failed to end user session for board ${DBBoard.boardId}: ${error}`, 'red');
+			});
 
 			const totalRooms = this.roomData.size + this.socket.excalidrawSocket.roomData.size;
 			this.socket.manager.prometheus.updateSocketMetrics(this.socket.io.sockets.sockets.size - 1, totalRooms);
@@ -625,25 +656,40 @@ export class TldrawSocket {
 			socket.leave(DBBoard.boardId);
 			socket.removeAllListeners();
 
-			const updatedRoom = await this.getRoomData(DBBoard.boardId);
+			const updatedRoom = this.roomData.get(DBBoard.boardId);
 			if (!updatedRoom) return;
 
 			updatedRoom.collaborators.delete(socket.id as SocketId);
 
-			if (updatedRoom.collaborators.size) this.roomData.set(DBBoard.boardId, updatedRoom);
-			else {
-				await this.saveSpecificBoard(DBBoard.boardId);
+			if (updatedRoom.collaborators.size) {
+				this.roomData.set(DBBoard.boardId, updatedRoom);
+				return;
+			}
 
-				const queued = this.queuedFiles.get(DBBoard.boardId);
-				if (queued) {
-					if (queued.length) await this.socket.manager.files.deleteMediaFiles(DBBoard.boardId, queued);
-					await this.socket.manager.files.deleteUnusedFiles(DBBoard.boardId);
-					this.queuedFiles.delete(DBBoard.boardId);
+			await this.saveSpecificBoard(DBBoard.boardId).catch((error) => {
+				this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+				LoggerModule('Socket', `Failed to save board ${DBBoard.boardId} during disconnect cleanup: ${error}`, 'red');
+			});
+
+			const queued = this.queuedFiles.get(DBBoard.boardId);
+			if (queued) {
+				if (queued.length) {
+					await this.socket.manager.files.deleteMediaFiles(DBBoard.boardId, queued).catch((error) => {
+						this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+						LoggerModule('Socket', `Failed to delete queued media files for board ${DBBoard.boardId}: ${error}`, 'red');
+					});
 				}
 
-				this.roomData.delete(DBBoard.boardId);
-				this.socket.io.in(DBBoard.boardId).disconnectSockets();
+				await this.socket.manager.files.deleteUnusedFiles(DBBoard.boardId).catch((error) => {
+					this.socket.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+					LoggerModule('Socket', `Failed to delete unused files for board ${DBBoard.boardId}: ${error}`, 'red');
+				});
+
+				this.queuedFiles.delete(DBBoard.boardId);
 			}
+
+			this.roomData.delete(DBBoard.boardId);
+			this.socket.io.in(DBBoard.boardId).disconnectSockets();
 		});
 	}
 
