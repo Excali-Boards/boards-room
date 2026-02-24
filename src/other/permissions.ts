@@ -149,6 +149,10 @@ export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserParti
 			if (role === GlobalRole.Developer) return 'admin';
 			break;
 		}
+		case 'global': {
+			if (role === GlobalRole.Developer) return 'admin';
+			break;
+		}
 	}
 
 	return null;
