@@ -1,9 +1,9 @@
 import { isDeveloper, canManage, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel, canManageBoardWithIds, getUserHighestRole, PermissionHierarchy } from '../other/permissions.js';
 import { compressionUtils, parseZodError, securityUtils } from '../modules/functions.js';
 import config, { boardObject, nameObject } from '../core/config.js';
+import { db, invalidateCacheForWrite } from '../core/prisma.js';
 import { json, makeRoute } from '../services/routes.js';
 import { DBUserPartial } from '../other/vars.js';
-import { db } from '../core/prisma.js';
 import manager from '../index.js';
 import { z } from 'zod';
 
@@ -226,6 +226,12 @@ export default [
 			if (force) {
 				const deletedBoard = await manager.utils.deleteBoard(DBBoard);
 				if (!deletedBoard) return json(c, 500, { error: 'Failed to delete board.' });
+
+				await Promise.all([
+					invalidateCacheForWrite(manager, 'board'),
+					invalidateCacheForWrite(manager, 'category'),
+				]);
+
 				return json(c, 200, { data: 'Board deleted successfully.' });
 			}
 

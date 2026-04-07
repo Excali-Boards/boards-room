@@ -250,9 +250,11 @@ export default [
 			const canDeleteGroup = canManage(c.var.DBUser, { type: 'global', data: null });
 			if (!canDeleteGroup) return json(c, 403, { error: 'You do not have permission to delete this group.' });
 
-			const DBGroup = await db(manager, 'group', 'findUnique', { where: { groupId }, include: { categories: true } });
+			const DBGroup = await manager.prisma.group.findFirst({ where: { groupId }, select: { groupId: true } });
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
-			else if (DBGroup.categories.length) return json(c, 400, { error: 'Group has categories.' });
+
+			const categoryCount = await manager.prisma.category.count({ where: { groupId } });
+			if (categoryCount > 0) return json(c, 400, { error: 'Group has categories.' });
 
 			const deletedGroup = await db(manager, 'group', 'delete', { where: { groupId } });
 			if (!deletedGroup) return json(c, 500, { error: 'Failed to delete group.' });

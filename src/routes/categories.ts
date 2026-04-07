@@ -193,9 +193,11 @@ export default [
 			const canDeleteCategory = canManage(c.var.DBUser, { type: 'group', data: { groupId } });
 			if (!canDeleteCategory) return json(c, 403, { error: 'You do not have permission to delete this category.' });
 
-			const DBCategory = await db(manager, 'category', 'findUnique', { where: { categoryId, groupId }, include: { boards: true } });
+			const DBCategory = await manager.prisma.category.findFirst({ where: { categoryId, groupId }, select: { categoryId: true } });
 			if (!DBCategory) return json(c, 404, { error: 'Category not found.' });
-			else if (DBCategory.boards.length) return json(c, 400, { error: 'Category has boards.' });
+
+			const boardCount = await manager.prisma.board.count({ where: { categoryId, category: { groupId } } });
+			if (boardCount > 0) return json(c, 400, { error: 'Category has boards.' });
 
 			const deletedCategory = await db(manager, 'category', 'delete', { where: { categoryId, groupId } });
 			if (!deletedCategory) return json(c, 500, { error: 'Failed to delete category.' });
