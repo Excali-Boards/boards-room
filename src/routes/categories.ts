@@ -1,8 +1,8 @@
 import { canManage, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel } from '../other/permissions.js';
 import { parseZodError, securityUtils } from '../modules/functions.js';
+import { db, invalidateCacheForWrite } from '../core/prisma.js';
 import { json, makeRoute } from '../services/routes.js';
 import config, { nameObject } from '../core/config.js';
-import { db } from '../core/prisma.js';
 import manager from '../index.js';
 import { z } from 'zod';
 
@@ -181,6 +181,76 @@ export default [
 		},
 	}),
 	makeRoute({
+		path: '/groups/:groupId/categories/:categoryId/move',
+		method: 'POST',
+		enabled: true,
+		devOnly: true,
+		auth: true,
+
+		handler: async (c) => {
+			const categoryId = c.req.param('categoryId');
+			const groupId = c.req.param('groupId');
+
+			const isValid = moveCategorySchema.safeParse(await c.req.json().catch(() => ({})));
+			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
+
+			const DBCategory = await db(manager, 'category', 'findUnique', { where: { categoryId, groupId }, select: { categoryId: true, groupId: true, index: true } });
+			if (!DBCategory) return json(c, 404, { error: 'Category not found.' });
+
+			const DBTargetGroup = await db(manager, 'group', 'findUnique', { where: { groupId: isValid.data.targetGroupId }, select: { groupId: true } });
+			if (!DBTargetGroup) return json(c, 404, { error: 'Target group not found.' });
+
+			if (DBCategory.groupId === DBTargetGroup.groupId) return json(c, 400, { error: 'Source and target group cannot be the same.' });
+
+			const movedCategory = await manager.prisma.$transaction(async (tx) => {
+				const sourceGroupId = DBCategory.groupId;
+				const targetGroupId = DBTargetGroup.groupId;
+
+				await tx.category.updateMany({
+					where: {
+						groupId: sourceGroupId,
+						index: { gt: DBCategory.index },
+					},
+					data: { index: { decrement: 1 } },
+				});
+
+				const targetCount = await tx.category.count({
+					where: { groupId: targetGroupId },
+				});
+
+				const desiredIndex = isValid.data.targetIndex ?? targetCount;
+				const newIndex = Math.max(0, Math.min(desiredIndex, targetCount));
+
+				await tx.category.updateMany({
+					where: {
+						groupId: targetGroupId,
+						index: { gte: newIndex },
+					},
+					data: { index: { increment: 1 } },
+				});
+
+				return tx.category.update({
+					where: { categoryId },
+					data: {
+						groupId: targetGroupId,
+						index: newIndex,
+					},
+					select: { categoryId: true, groupId: true, index: true },
+				});
+			});
+
+			await invalidateCacheForWrite(manager, 'category');
+
+			return json(c, 200, {
+				data: {
+					categoryId: movedCategory.categoryId,
+					groupId: movedCategory.groupId,
+					index: movedCategory.index,
+				},
+			});
+		},
+	}),
+	makeRoute({
 		path: '/groups/:groupId/categories/:categoryId',
 		method: 'DELETE',
 		enabled: true,
@@ -217,3 +287,9 @@ export default [
 		},
 	}),
 ];
+
+// Schemas.
+const moveCategorySchema = z.object({
+	targetGroupId: z.string().min(1),
+	targetIndex: z.number().int().min(0).optional(),
+});

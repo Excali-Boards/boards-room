@@ -204,6 +204,81 @@ export default [
 		},
 	}),
 	makeRoute({
+		path: '/groups/:groupId/categories/:categoryId/boards/:boardId/move',
+		method: 'POST',
+		enabled: true,
+		devOnly: true,
+		auth: true,
+
+		handler: async (c) => {
+			const boardId = c.req.param('boardId');
+			const groupId = c.req.param('groupId');
+			const categoryId = c.req.param('categoryId');
+
+			const isValid = moveBoardSchema.safeParse(await c.req.json().catch(() => ({})));
+			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
+
+			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } }, select: { boardId: true, categoryId: true, index: true } });
+			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+
+			const DBTargetCategory = await db(manager, 'category', 'findUnique', { where: { categoryId: isValid.data.targetCategoryId }, select: { categoryId: true, groupId: true } });
+			if (!DBTargetCategory) return json(c, 404, { error: 'Target category not found.' });
+
+			if (DBBoard.categoryId === DBTargetCategory.categoryId) return json(c, 400, { error: 'Source and target category cannot be the same.' });
+
+			const movedBoard = await manager.prisma.$transaction(async (tx) => {
+				const sourceCategoryId = DBBoard.categoryId;
+				const targetCategoryId = DBTargetCategory.categoryId;
+
+				await tx.board.updateMany({
+					where: {
+						categoryId: sourceCategoryId,
+						index: { gt: DBBoard.index },
+					},
+					data: { index: { decrement: 1 } },
+				});
+
+				const targetCount = await tx.board.count({
+					where: { categoryId: targetCategoryId },
+				});
+
+				const desiredIndex = isValid.data.targetIndex ?? targetCount;
+				const newIndex = Math.max(0, Math.min(desiredIndex, targetCount));
+
+				await tx.board.updateMany({
+					where: {
+						categoryId: targetCategoryId,
+						index: { gte: newIndex },
+					},
+					data: { index: { increment: 1 } },
+				});
+
+				return tx.board.update({
+					where: { boardId },
+					data: {
+						categoryId: targetCategoryId,
+						index: newIndex,
+					},
+					select: { boardId: true, categoryId: true, index: true },
+				});
+			});
+
+			await Promise.all([
+				invalidateCacheForWrite(manager, 'board'),
+				invalidateCacheForWrite(manager, 'category'),
+			]);
+
+			return json(c, 200, {
+				data: {
+					boardId: movedBoard.boardId,
+					categoryId: movedBoard.categoryId,
+					groupId: DBTargetCategory.groupId,
+					index: movedBoard.index,
+				},
+			});
+		},
+	}),
+	makeRoute({
 		path: '/groups/:groupId/categories/:categoryId/boards/:boardId',
 		method: 'DELETE',
 		enabled: true,
@@ -363,3 +438,9 @@ export default [
 		},
 	}),
 ];
+
+// Schemas.
+const moveBoardSchema = z.object({
+	targetCategoryId: z.string().min(1),
+	targetIndex: z.number().int().min(0).optional(),
+});
