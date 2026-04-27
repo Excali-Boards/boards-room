@@ -1,5 +1,5 @@
 import { ActionType, BareBoard, ClientToServerEvents, FileActionData, RoomData, ServerToClientEvents, SnapshotData } from '../types.js';
-import { getSceneVersion, isInitializedImageElement, newElementWith, reconcileElements } from '../other/excalidraw.js';
+import { getSceneVersion, hashElementsVersion, isInitializedImageElement, newElementWith, reconcileElements } from '../other/excalidraw.js';
 import { compressionUtils, resolveClientIp } from '../modules/functions.js';
 import { DBUserPartial, DBUserPartialType } from '../other/vars.js';
 import { hasAccessToBoardWithIds } from '../other/permissions.js';
@@ -236,6 +236,13 @@ export class ExcalidrawSocket {
 
 	constructor (readonly socket: SocketServer) { }
 
+	private isSameScene(first: RoomData<'Excalidraw'>['elements'], second: RoomData<'Excalidraw'>['elements']): boolean {
+		if (first.length !== second.length) return false;
+
+		return getSceneVersion(first) === getSceneVersion(second)
+			&& hashElementsVersion(first) === hashElementsVersion(second);
+	}
+
 	public async saveAllBoards(): Promise<void> {
 		const savePromises = Array.from(this.roomData.keys()).map((boardId) => this.saveSpecificBoard(boardId));
 		await Promise.allSettled(savePromises);
@@ -252,9 +259,8 @@ export class ExcalidrawSocket {
 			try {
 				const body = await this.socket.manager.files.readableToBuffer(existingFile.Body as Readable);
 				const decompressed = compressionUtils.decompressAndDecrypt<RoomData<'Excalidraw'>['elements']>(body);
-				const existingVersion = getSceneVersion(decompressed);
 
-				if (currentVersion === existingVersion) return;
+				if (this.isSameScene(roomData.elements, decompressed)) return;
 			} catch (error) {
 				this.socket.manager.prometheus.recordError('version_compare_error', 'socket');
 				LoggerModule('Socket', `Error comparing versions: ${error}`, 'red');
@@ -467,12 +473,11 @@ export class ExcalidrawSocket {
 		if (!current) return;
 
 		const reconciled = reconcileElements(current.elements, data.elements);
-		const version = getSceneVersion(reconciled);
+		const cleaned = reconciled.filter((e) => !e.isDeleted);
 
-		if (version !== getSceneVersion(current.elements)) {
-			const cleaned = data.elements.filter((e) => !e.isDeleted);
+		if (!this.isSameScene(current.elements, cleaned)) {
 			this.roomData.set(boardId, { ...current, elements: cleaned });
-			this.socket.io.to(boardId).emit('sendSnapshot', data);
+			this.socket.io.to(boardId).emit('sendSnapshot', { elements: reconciled });
 		}
 
 		this.socket.io.to(boardId).emit('isSaved');
