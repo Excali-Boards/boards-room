@@ -16,10 +16,19 @@ const config = {
 	isDev: process.env.NODE_ENV === 'development',
 
 	s3: {
+		bucket: process.env.S3_BUCKET!,
 		endpoint: process.env.S3_ENDPOINT!,
 		accessKey: process.env.S3_ACCESS_KEY!,
 		secretKey: process.env.S3_SECRET_KEY!,
-		bucket: process.env.S3_BUCKET!,
+
+		connectionTimeoutMs: process.env.S3_CONNECTION_TIMEOUT_MS ? parseInt(process.env.S3_CONNECTION_TIMEOUT_MS, 10) : 15000,
+		socketTimeoutMs: process.env.S3_SOCKET_TIMEOUT_MS ? parseInt(process.env.S3_SOCKET_TIMEOUT_MS, 10) : 30000,
+		maxAttempts: process.env.S3_MAX_ATTEMPTS ? parseInt(process.env.S3_MAX_ATTEMPTS, 10) : 3,
+	},
+
+	security: {
+		maxRequestSizeBytes: process.env.MAX_REQUEST_SIZE_BYTES ? parseInt(process.env.MAX_REQUEST_SIZE_BYTES, 10) : 10 * 1024 * 1024,
+		maxUploadRequestSizeBytes: process.env.MAX_UPLOAD_REQUEST_SIZE_BYTES ? parseInt(process.env.MAX_UPLOAD_REQUEST_SIZE_BYTES, 10) : 20 * 1024 * 1024,
 	},
 
 	valkey: {
@@ -55,10 +64,19 @@ const ConfigSchema = z.object({
 	isDev: z.boolean(),
 
 	s3: z.object({
+		bucket: z.string(),
 		endpoint: z.string(),
 		accessKey: z.string(),
 		secretKey: z.string(),
-		bucket: z.string(),
+
+		connectionTimeoutMs: z.number().int().min(1000),
+		socketTimeoutMs: z.number().int().min(1000),
+		maxAttempts: z.number().int().min(1).max(10),
+	}),
+
+	security: z.object({
+		maxRequestSizeBytes: z.number().int().min(1024),
+		maxUploadRequestSizeBytes: z.number().int().min(1024),
 	}),
 
 	valkey: z.object({

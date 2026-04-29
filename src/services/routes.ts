@@ -236,18 +236,26 @@ export default class Routes {
 		};
 	}
 
-	private requestSizeLimit(maxSize: number = securityConstants.maxRequestSizeBytes): MiddlewareHandler<HonoEnv> {
+	private requestSizeLimit(): MiddlewareHandler<HonoEnv> {
 		return async (c, next) => {
 			const contentLength = c.req.header('content-length');
+			const maxSize = this.getMaxRequestSizeForPath(c.req.path);
 
-			if (contentLength && parseInt(contentLength) > maxSize) {
-				LoggerModule('Security', `Request size limit exceeded: ${contentLength} bytes (max: ${maxSize})`, 'yellow');
+			if (contentLength && Number.parseInt(contentLength, 10) > maxSize) {
+				LoggerModule('Security', `Request size limit exceeded: ${contentLength} bytes (max: ${maxSize}) on ${c.req.method} ${c.req.path}`, 'yellow');
 				return json(c, 413, { error: 'Request entity too large.' });
 			}
 
 			await next();
 			return;
 		};
+	}
+
+	private getMaxRequestSizeForPath(requestPath: string): number {
+		const isFileUploadRoute = /^\/files\/[^/]+\/(base64|raw)\/?$/.test(requestPath);
+		if (isFileUploadRoute) return Math.max(config.security.maxRequestSizeBytes, config.security.maxUploadRequestSizeBytes);
+
+		return config.security.maxRequestSizeBytes;
 	}
 }
 

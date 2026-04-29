@@ -16,10 +16,10 @@ class BaseFiles {
 			secretAccessKey: config.s3.secretKey,
 		},
 		requestHandler: {
-			connectionTimeout: 5000,
-			socketTimeout: 10000,
+			connectionTimeout: config.s3.connectionTimeoutMs,
+			socketTimeout: config.s3.socketTimeoutMs,
 		},
-		maxAttempts: 3,
+		maxAttempts: config.s3.maxAttempts,
 	});
 
 	private s3Health: S3HealthStatus = {
@@ -33,9 +33,12 @@ class BaseFiles {
 	constructor (protected manager: BoardsManager) { }
 
 	private parseS3Error(error: unknown): string {
-		const message = error instanceof Error ? error.message : String(error);
+		const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+		const message = rawMessage.trim() || 'Unknown S3 error.';
 		const metadata = error && typeof error === 'object' && '$metadata' in error ? (error as { $metadata?: { httpStatusCode?: number; }; }).$metadata : undefined;
 		const statusCode = metadata?.httpStatusCode;
+		const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
+		const name = error instanceof Error ? error.name : null;
 
 		if (statusCode === 403 && (
 			message.includes('boolean attribute \'defer\' is not allowed') ||
@@ -44,7 +47,47 @@ class BaseFiles {
 			return 'HTTP 403 with non-XML response from S3 endpoint (likely HTML/proxy/auth response).';
 		}
 
-		return statusCode ? `HTTP ${statusCode}: ${message}` : message;
+		const details = [statusCode ? `HTTP ${statusCode}` : null, code ? `code=${code}` : null, name && name !== 'Error' ? `name=${name}` : null].filter((entry): entry is string => entry !== null);
+		return details.length ? `${details.join(', ')}: ${message}` : message;
+	}
+
+	private isRetryableS3Error(error: unknown): boolean {
+		const metadata = error && typeof error === 'object' && '$metadata' in error ? (error as { $metadata?: { httpStatusCode?: number; }; }).$metadata : undefined;
+		const statusCode = metadata?.httpStatusCode;
+		if (statusCode !== undefined && (statusCode === 408 || statusCode === 425 || statusCode === 429 || statusCode >= 500)) return true;
+
+		const message = (error instanceof Error ? error.message : String(error ?? '')).toLowerCase();
+		return (
+			message.includes('timed out')
+			|| message.includes('timeout')
+			|| message.includes('did not establish a connection')
+			|| message.includes('econnreset')
+			|| message.includes('econnrefused')
+			|| message.includes('enotfound')
+			|| message.includes('socket hang up')
+			|| message.includes('network')
+		);
+	}
+
+	private async putObjectWithRetry(params: PutObjectCommand['input']): Promise<PutObjectCommandOutput> {
+		const maxAttempts = 2;
+		let attempt = 1;
+
+		while (attempt <= maxAttempts) {
+			try {
+				return await this.s3.send(new PutObjectCommand(params));
+			} catch (error) {
+				if (attempt >= maxAttempts || !this.isRetryableS3Error(error)) throw error;
+
+				const waitMs = Math.min(500 * Math.pow(2, attempt - 1), 2000);
+				LoggerModule('S3', `Retrying upload for key "${params.Key}" (attempt ${attempt + 1}/${maxAttempts}) in ${waitMs}ms after error: ${this.parseS3Error(error)}`, 'yellow');
+
+				await new Promise((resolve) => setTimeout(resolve, waitMs));
+				attempt++;
+			}
+		}
+
+		throw new Error('Upload failed after retry attempts.');
 	}
 
 	public getS3HealthStatus(): S3HealthStatus {
@@ -125,14 +168,12 @@ class BaseFiles {
 			if (Buffer.isBuffer(file)) fileSize = file.length;
 			else if (typeof file === 'string') fileSize = Buffer.byteLength(file, 'utf8');
 
-			const result = await this.s3.send(
-				new PutObjectCommand({
-					Bucket: config.s3.bucket,
-					Key: key,
-					Body: file,
-					ContentType: contentType,
-				}),
-			);
+			const result = await this.putObjectWithRetry({
+				Bucket: config.s3.bucket,
+				Key: key,
+				Body: file,
+				ContentType: contentType,
+			});
 
 			this.manager.prometheus.recordFileOperation('upload', 'success');
 

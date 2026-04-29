@@ -7,8 +7,6 @@ export const performanceConstants = {
 } as const;
 
 export const securityConstants = {
-	maxRequestSizeBytes: 10 * 1024 * 1024,
-
 	securityHeaders: {
 		'X-Content-Type-Options': 'nosniff',
 		'X-Frame-Options': 'DENY',

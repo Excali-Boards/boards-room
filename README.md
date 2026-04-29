@@ -57,6 +57,13 @@ S3_ENDPOINT="https://s3.example.com"
 S3_ACCESS_KEY="your-access-key"
 S3_SECRET_KEY="your-secret-key"
 S3_BUCKET="your-bucket-name"
+S3_CONNECTION_TIMEOUT_MS=15000
+S3_SOCKET_TIMEOUT_MS=30000
+S3_MAX_ATTEMPTS=3
+
+# Request body limits
+MAX_REQUEST_SIZE_BYTES=10485760
+MAX_UPLOAD_REQUEST_SIZE_BYTES=20971520
 
 # Rate limiting (optional)
 RATE_LIMITING_ENABLED=false
