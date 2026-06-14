@@ -1,4 +1,4 @@
-import { ActionType, BareBoard, ClientToServerEvents, FileActionData, RoomData, ServerToClientEvents, SnapshotData } from '../types.js';
+import { ActionType, BareBoard, ClientToServerEvents, FileActionData, RecentlyActiveRoom, RoomData, ServerToClientEvents, SnapshotData } from '../types.js';
 import { getSceneVersion, hashElementsVersion, isInitializedImageElement, newElementWith, reconcileElements } from '../other/excalidraw.js';
 import { compressionUtils, resolveClientIp } from '../modules/functions.js';
 import { DBUserPartial, DBUserPartialType } from '../other/vars.js';
@@ -19,9 +19,10 @@ import { db } from '../core/prisma.js';
 
 export default class SocketServer {
 	private honoServer: ServerType;
-	public io: Server<ClientToServerEvents, ServerToClientEvents>;
 	public connectionTimes = new Map<string, NodeJS.Timeout>();
+	public io: Server<ClientToServerEvents, ServerToClientEvents>;
 
+	public recentlyActiveRooms = new CustomMap<string, RecentlyActiveRoom>();
 	public excalidrawSocket = new ExcalidrawSocket(this);
 	public tldrawSocket = new TldrawSocket(this);
 
@@ -346,6 +347,7 @@ export class ExcalidrawSocket {
 
 		socket.join(DBBoard.boardId);
 		this.roomData.set(DBBoard.boardId, roomData);
+		this.socket.recentlyActiveRooms.delete(DBBoard.boardId);
 
 		socket.emit('init', { elements: roomData.elements });
 
@@ -374,6 +376,13 @@ export class ExcalidrawSocket {
 
 			const updatedRoom = this.roomData.get(DBBoard.boardId);
 			if (!updatedRoom) return;
+
+			const lastCollaborators = [...updatedRoom.collaborators.values()].map((c) => ({
+				id: c.id!,
+				socketId: c.socketId!,
+				username: c.username!,
+				avatarUrl: c.avatarUrl || null,
+			}));
 
 			updatedRoom.collaborators.delete(socket.id as SocketId);
 
@@ -404,6 +413,14 @@ export class ExcalidrawSocket {
 
 				this.queuedFiles.delete(DBBoard.boardId);
 			}
+
+			this.socket.recentlyActiveRooms.set(DBBoard.boardId, {
+				boardId: DBBoard.boardId,
+				elements: updatedRoom.elements.length,
+				type: 'Excalidraw',
+				lastCollaborators,
+				lastActiveAt: Date.now(),
+			});
 
 			this.roomData.delete(DBBoard.boardId);
 			this.socket.io.in(DBBoard.boardId).disconnectSockets();
@@ -621,6 +638,7 @@ export class TldrawSocket {
 
 		socket.join(DBBoard.boardId);
 		this.roomData.set(DBBoard.boardId, roomData);
+		this.socket.recentlyActiveRooms.delete(DBBoard.boardId);
 
 		socket.on('tldraw', (message) => {
 			this.socket.manager.prometheus.recordUserAction(socket.id);
@@ -664,6 +682,13 @@ export class TldrawSocket {
 			const updatedRoom = this.roomData.get(DBBoard.boardId);
 			if (!updatedRoom) return;
 
+			const lastCollaborators = [...updatedRoom.collaborators.values()].map((c) => ({
+				id: c.id!,
+				socketId: c.socketId!,
+				username: c.username!,
+				avatarUrl: c.avatarUrl || null,
+			}));
+
 			updatedRoom.collaborators.delete(socket.id as SocketId);
 
 			if (updatedRoom.collaborators.size) {
@@ -692,6 +717,14 @@ export class TldrawSocket {
 
 				this.queuedFiles.delete(DBBoard.boardId);
 			}
+
+			this.socket.recentlyActiveRooms.set(DBBoard.boardId, {
+				boardId: DBBoard.boardId,
+				elements: updatedRoom.room.getCurrentSnapshot().documents.length,
+				type: 'Tldraw',
+				lastCollaborators,
+				lastActiveAt: Date.now(),
+			});
 
 			this.roomData.delete(DBBoard.boardId);
 			this.socket.io.in(DBBoard.boardId).disconnectSockets();

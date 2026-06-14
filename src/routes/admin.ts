@@ -48,7 +48,14 @@ export default [
 				});
 			}
 
-			return json(c, 200, { data: allRooms });
+			const recentlyActiveRooms = [...manager.socket.recentlyActiveRooms.values()].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+
+			return json(c, 200, {
+				data: {
+					rooms: allRooms,
+					recentlyActiveRooms,
+				},
+			});
 		},
 	}),
 	makeRoute({

@@ -140,6 +140,7 @@ export const sessionSchema = z.object({
 	displayName: z.string(),
 	avatarUrl: z.url().optional().nullable(),
 	currentUserId: z.string().optional(),
+	refreshProfile: z.boolean().optional(),
 	device: z.enum(Device).optional(),
 	ip: z.string().optional(),
 });
@@ -159,7 +160,7 @@ export type SessionOutput = Pick<DBUserPartialType, 'userId' | 'email' | 'displa
 	sessions: { dbId: string; lastUsed: Date; }[];
 };
 
-async function createOrLinkUser({ platform, email, displayName, avatarUrl, currentUserId }: SessionInput): Promise<SessionOutput | null> {
+export async function createOrLinkUser({ platform, email, displayName, avatarUrl, currentUserId, refreshProfile }: SessionInput): Promise<SessionOutput | null> {
 	const encryptedEmail = securityUtils.encrypt(email);
 	const finalAvatarUrl = avatarUrl || `https://gravatar.com/avatar/${securityUtils.hash(email)}?d=mp`;
 
@@ -250,9 +251,12 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 
 	// Login with main method
 	if (userByEmail && userByEmail.mainLoginType === platform) {
+		const updateData: Record<string, unknown> = { avatarUrl: finalAvatarUrl };
+		if (refreshProfile) updateData.displayName = displayName;
+
 		return await db(manager, 'user', 'update', {
 			where: { userId: userByEmail.userId },
-			data: { displayName, avatarUrl: finalAvatarUrl },
+			data: updateData,
 			select: {
 				userId: true,
 				email: true,
@@ -272,9 +276,12 @@ async function createOrLinkUser({ platform, email, displayName, avatarUrl, curre
 			});
 		}
 
+		const updateData: Record<string, unknown> = { avatarUrl: finalAvatarUrl };
+		if (refreshProfile) updateData.displayName = displayName;
+
 		return await db(manager, 'user', 'update', {
 			where: { userId: existingLoginMethod.userId },
-			data: { displayName, avatarUrl: finalAvatarUrl },
+			data: updateData,
 			select: {
 				userId: true,
 				email: true,
