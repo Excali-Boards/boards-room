@@ -81,24 +81,56 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));
+			const createGroupSchema = nameObject.extend({
+				copyPermissionsFromGroupId: z.string().optional(),
+			});
+
+			const isValid = createGroupSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
 			const canCreateGroup = canManage(c.var.DBUser, { type: 'global', data: null });
 			if (!canCreateGroup) return json(c, 403, { error: 'You do not have permission to create groups.' });
 
+			if (isValid.data.copyPermissionsFromGroupId) {
+				const sourceGroup = await db(manager, 'group', 'findUnique', {
+					where: { groupId: isValid.data.copyPermissionsFromGroupId },
+					select: { groupId: true },
+				});
+				if (!sourceGroup) return json(c, 400, { error: 'Source group for permission copy not found.' });
+			}
+
 			const totalGroups = await db(manager, 'group', 'findMany', { select: { index: true } }) || [];
+			const newGroupId = securityUtils.randomString(12);
 			const newGroup = await db(manager, 'group', 'create', {
 				select: { groupId: true },
 				data: {
 					name: isValid.data.name,
-					groupId: securityUtils.randomString(12),
+					groupId: newGroupId,
 					categories: { create: [] },
 					index: (totalGroups && totalGroups.length > 0 ? Math.max(...totalGroups.map((g) => g.index)) + 1 : 0),
 				},
 			});
 
 			if (!newGroup) return json(c, 500, { error: 'Failed to create group.' });
+
+			if (isValid.data.copyPermissionsFromGroupId) {
+				const sourcePerms = await db(manager, 'groupPermission', 'findMany', {
+					where: { groupId: isValid.data.copyPermissionsFromGroupId },
+					select: { userId: true, role: true, grantedBy: true },
+				}) || [];
+
+				if (sourcePerms.length > 0) {
+					await db(manager, 'groupPermission', 'createMany', {
+						data: sourcePerms.map((perm) => ({
+							userId: perm.userId,
+							groupId: newGroupId,
+							role: perm.role,
+							grantedBy: c.var.DBUser.userId,
+						})),
+					});
+				}
+			}
+
 			return json(c, 200, { data: 'Group created successfully.' });
 		},
 	}),

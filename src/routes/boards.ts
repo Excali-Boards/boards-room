@@ -18,19 +18,32 @@ export default [
 			const categoryId = c.req.param('categoryId');
 			const groupId = c.req.param('groupId');
 
-			const isValid = boardObject.safeParse(await c.req.json().catch(() => ({})));
+			const createBoardSchema = boardObject.extend({
+				copyPermissionsFromBoardId: z.string().optional(),
+			});
+
+			const isValid = createBoardSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
 			const canCreateBoard = canManage(c.var.DBUser, { type: 'category', data: { categoryId, groupId } });
 			if (!canCreateBoard) return json(c, 403, { error: 'You do not have permission to create boards in this category.' });
 
+			if (isValid.data.copyPermissionsFromBoardId) {
+				const sourceBoard = await db(manager, 'board', 'findUnique', {
+					where: { boardId: isValid.data.copyPermissionsFromBoardId },
+					select: { boardId: true },
+				});
+				if (!sourceBoard) return json(c, 400, { error: 'Source board for permission copy not found.' });
+			}
+
 			const totalBoards = await db(manager, 'board', 'findMany', { where: { categoryId, category: { groupId } }, select: { index: true } });
+			const newBoardId = securityUtils.randomString(12);
 			const newBoard = await db(manager, 'board', 'create', {
 				data: {
 					name: isValid.data.name,
 					type: isValid.data.type,
 					categoryId,
-					boardId: securityUtils.randomString(12),
+					boardId: newBoardId,
 					index: (totalBoards && totalBoards.length > 0 ? Math.max(...totalBoards.map((b) => b.index)) + 1 : 0),
 				},
 			});
@@ -42,6 +55,24 @@ export default [
 			if (!uploaded) {
 				await db(manager, 'board', 'deleteMany', { where: { boardId: newBoard.boardId } }).catch(() => null);
 				return json(c, 500, { error: 'Failed to upload board file.' });
+			}
+
+			if (isValid.data.copyPermissionsFromBoardId) {
+				const sourcePerms = await db(manager, 'boardPermission', 'findMany', {
+					where: { boardId: isValid.data.copyPermissionsFromBoardId },
+					select: { userId: true, role: true },
+				}) || [];
+
+				if (sourcePerms.length > 0) {
+					await db(manager, 'boardPermission', 'createMany', {
+						data: sourcePerms.map((perm) => ({
+							userId: perm.userId,
+							boardId: newBoardId,
+							role: perm.role,
+							grantedBy: c.var.DBUser.userId,
+						})),
+					});
+				}
 			}
 
 			return json(c, 200, { data: 'Board created successfully.' });

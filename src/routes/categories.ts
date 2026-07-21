@@ -16,23 +16,55 @@ export default [
 		handler: async (c) => {
 			const groupId = c.req.param('groupId');
 
-			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));
+			const createCategorySchema = nameObject.extend({
+				copyPermissionsFromCategoryId: z.string().optional(),
+			});
+
+			const isValid = createCategorySchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
 
 			const canCreateCategory = canManage(c.var.DBUser, { type: 'group', data: { groupId } });
 			if (!canCreateCategory) return json(c, 403, { error: 'You do not have permission to create categories in this group.' });
 
+			if (isValid.data.copyPermissionsFromCategoryId) {
+				const sourceCategory = await db(manager, 'category', 'findUnique', {
+					where: { categoryId: isValid.data.copyPermissionsFromCategoryId },
+					select: { categoryId: true },
+				});
+				if (!sourceCategory) return json(c, 400, { error: 'Source category for permission copy not found.' });
+			}
+
 			const totalCategories = await db(manager, 'category', 'findMany', { where: { groupId }, select: { index: true } }) || [];
+			const newCategoryId = securityUtils.randomString(12);
 			const newCategory = await db(manager, 'category', 'create', {
 				data: {
 					name: isValid.data.name,
-					categoryId: securityUtils.randomString(12),
+					categoryId: newCategoryId,
 					index: (totalCategories && totalCategories.length > 0 ? Math.max(...totalCategories.map((c) => c.index)) + 1 : 0),
 					groupId,
 				},
 			});
 
 			if (!newCategory) return json(c, 500, { error: 'Failed to create category.' });
+
+			if (isValid.data.copyPermissionsFromCategoryId) {
+				const sourcePerms = await db(manager, 'categoryPermission', 'findMany', {
+					where: { categoryId: isValid.data.copyPermissionsFromCategoryId },
+					select: { userId: true, role: true },
+				}) || [];
+
+				if (sourcePerms.length > 0) {
+					await db(manager, 'categoryPermission', 'createMany', {
+						data: sourcePerms.map((perm) => ({
+							userId: perm.userId,
+							categoryId: newCategoryId,
+							role: perm.role,
+							grantedBy: c.var.DBUser.userId,
+						})),
+					});
+				}
+			}
+
 			return json(c, 200, { data: 'Successfully created category.' });
 		},
 	}),
