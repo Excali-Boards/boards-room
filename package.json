@@ -22,6 +22,14 @@
 	},
 	"main": "dist/index.js",
 	"license": "GPL-3.0",
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"@prisma/client",
+			"@prisma/engines",
+			"core-js",
+			"prisma"
+		]
+	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.893.0",
 		"@aws-sdk/s3-request-presigner": "^3.940.0",
