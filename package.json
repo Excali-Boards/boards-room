@@ -17,8 +17,7 @@
 		"afterbuild": "pnpm run migrate && pnpm run start",
 		"postinstall": "pnpm prisma generate",
 		"db:create": "node dist/scripts/db.js",
-		"migrate:board-type": "node dist/scripts/migrate-board-type.js",
-		"migrate": "pnpm db:create && pnpm run migrate:board-type && pnpm prisma db push",
+		"migrate": "pnpm db:create && pnpm prisma db push",
 		"updates": "pnpm npm-check-updates -i --format group"
 	},
 	"main": "dist/index.js",
