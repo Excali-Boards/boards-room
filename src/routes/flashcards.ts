@@ -21,7 +21,7 @@ export default [
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
 
-			const DBDeck = await db(manager, 'flashcardDeck', 'findFirst', {
+			const DBDeck = await manager.prisma.flashcardDeck.findFirst({
 				where: { boardId },
 				include: {
 					board: { select: { boardId: true, name: true } },

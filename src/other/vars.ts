@@ -49,8 +49,64 @@ export const DBUserAnalyticsArgs = {
 	},
 };
 
+export const PersonalWorkspaceArgs = {
+	select: {
+		groupId: true,
+		user: {
+			select: {
+				userId: true,
+				displayName: true,
+				email: true,
+				avatarUrl: true,
+			},
+		},
+		boards: {
+			select: {
+				categoryId: true,
+				board: {
+					select: {
+						boardId: true,
+						categoryId: true,
+						name: true,
+						type: true,
+						index: true,
+						totalSizeBytes: true,
+						scheduledForDeletion: true,
+					},
+				},
+			},
+		},
+		categories: {
+			orderBy: { index: 'asc' },
+			select: {
+				dbId: true,
+				categoryId: true,
+				name: true,
+				backingCategoryId: true,
+				boards: {
+					select: {
+						board: {
+							select: {
+								boardId: true,
+								name: true,
+								type: true,
+								index: true,
+								totalSizeBytes: true,
+								scheduledForDeletion: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+} satisfies Prisma.PersonalWorkspaceDefaultArgs;
+
 export const DBUserPartial = Prisma.validator<Prisma.UserDefaultArgs>()(DBUserSelectArgs);
 export type DBUserPartialType = Prisma.UserGetPayload<typeof DBUserPartial>;
 
 export const DBUserAnalytics = Prisma.validator<Prisma.UserBoardActivityDefaultArgs>()(DBUserAnalyticsArgs);
 export type DBUserAnalyticsType = Prisma.UserBoardActivityGetPayload<typeof DBUserAnalytics>;
+
+export const PersonalWorkspace = Prisma.validator<Prisma.PersonalWorkspaceDefaultArgs>()(PersonalWorkspaceArgs);
+export type PersonalWorkspaceType = Prisma.PersonalWorkspaceGetPayload<typeof PersonalWorkspace>;

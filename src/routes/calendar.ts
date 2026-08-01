@@ -41,7 +41,7 @@ export default [
 			const accessLevel = getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId } });
 			if (!accessLevel) return json(c, 403, { error: 'You do not have access to this group.' });
 
-			const DBGroup = await db(manager, 'group', 'findUnique', { where: { groupId }, include: { events: { orderBy: { start: 'asc' }, include: { creator: { select: { displayName: true, avatarUrl: true } } } } } });
+			const DBGroup = await manager.prisma.group.findUnique({ where: { groupId }, include: { events: { orderBy: { start: 'asc' }, include: { creator: { select: { displayName: true, avatarUrl: true } } } } } });
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
 
 			return json(c, 200, {

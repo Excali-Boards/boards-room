@@ -236,7 +236,8 @@ export default class PrometheusMetrics extends MetricsBase {
 	private async getDatabaseMetrics(): Promise<void> {
 		try {
 			const [files, users, invites, boards, categories, groups] = await Promise.all([
-				db(this.manager, 'file', 'aggregate', { _count: { dbId: true }, _sum: { sizeBytes: true } }),
+				this.manager.prisma.file.aggregate({ _count: { dbId: true }, _sum: { sizeBytes: true } }),
+
 				db(this.manager, 'user', 'count', {}),
 				db(this.manager, 'invite', 'count', {}),
 				db(this.manager, 'board', 'count', {}),

@@ -1,4 +1,4 @@
-import { canManage, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel } from '../other/permissions.js';
+import { canManage, canManagePermissions, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel } from '../other/permissions.js';
 import { parseZodError, securityUtils } from '../modules/functions.js';
 import { db, invalidateCacheForWrite } from '../core/prisma.js';
 import { json, makeRoute } from '../services/routes.js';
@@ -15,6 +15,8 @@ export default [
 
 		handler: async (c) => {
 			const groupId = c.req.param('groupId');
+			const personalGroup = await manager.prisma.group.findUnique({ where: { groupId }, select: { personalWorkspace: { select: { dbId: true } } } });
+			if (personalGroup?.personalWorkspace) return json(c, 400, { error: 'Use the personal category endpoint for personal workspaces.' });
 
 			const createCategorySchema = nameObject.extend({
 				copyPermissionsFromCategoryId: z.string().optional(),
@@ -29,9 +31,13 @@ export default [
 			if (isValid.data.copyPermissionsFromCategoryId) {
 				const sourceCategory = await db(manager, 'category', 'findUnique', {
 					where: { categoryId: isValid.data.copyPermissionsFromCategoryId },
-					select: { categoryId: true },
+					select: { categoryId: true, groupId: true },
 				});
 				if (!sourceCategory) return json(c, 400, { error: 'Source category for permission copy not found.' });
+				if (!canManagePermissions(c.var.DBUser, { type: 'group', data: { groupId } })
+					|| !canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId: sourceCategory.categoryId, groupId: sourceCategory.groupId } })) {
+					return json(c, 403, { error: 'You do not have permission to copy this category\'s permissions.' });
+				}
 			}
 
 			const totalCategories = await db(manager, 'category', 'findMany', { where: { groupId }, select: { index: true } }) || [];

@@ -25,7 +25,7 @@ export default [
 			const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
 			const location = isValid.data.ip ? await manager.utils.getIpLocation(isValid.data.ip) : null;
-			const locationEncrypted = location ? securityUtils.encrypt(location) : null;
+			const locationEncrypted = location ? securityUtils.encryptRandom(location) : null;
 
 			await db(manager, 'session', 'create', {
 				data: {

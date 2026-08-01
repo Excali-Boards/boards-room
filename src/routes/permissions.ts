@@ -359,10 +359,12 @@ export default [
 // Schemas.
 export type CreateInviteRequest = z.infer<typeof createInviteSchema>;
 
+const resourceIdsSchema = z.array(z.string().min(1)).min(1).optional();
+
 export const createInviteSchema = z.object({
-	groupIds: z.array(z.string()).optional(),
-	categoryIds: z.array(z.string()).optional(),
-	boardIds: z.array(z.string()).optional(),
+	groupIds: resourceIdsSchema,
+	categoryIds: resourceIdsSchema,
+	boardIds: resourceIdsSchema,
 
 	groupRole: z.enum(GroupRole).optional(),
 	categoryRole: z.enum(CategoryRole).optional(),
@@ -386,9 +388,9 @@ export type GrantPermissionsRequest = z.infer<typeof grantPermissionSchema>;
 export const grantPermissionSchema = z.object({
 	userId: z.string(),
 
-	groupIds: z.array(z.string()).optional(),
-	categoryIds: z.array(z.string()).optional(),
-	boardIds: z.array(z.string()).optional(),
+	groupIds: resourceIdsSchema,
+	categoryIds: resourceIdsSchema,
+	boardIds: resourceIdsSchema,
 
 	groupRole: z.enum(GroupRole).optional(),
 	categoryRole: z.enum(CategoryRole).optional(),

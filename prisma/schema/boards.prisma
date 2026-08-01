@@ -1,94 +1,97 @@
 model Group {
-    dbId    String @id @default(uuid())
-    groupId String @unique
+  dbId    String @id @default(uuid())
+  groupId String @unique
 
-    name  String
-    index Int
+  name  String
+  index Int
 
-    calCode String?
-    events  Event[]
+  calCode String?
+  events  Event[]
 
-    categories  Category[]
-    permissions GroupPermission[]
+  categories        Category[]
+  permissions       GroupPermission[]
+  personalWorkspace PersonalWorkspace?
 
-    @@index([index])
+  @@index([index])
 }
 
 model Category {
-    dbId       String @id @default(uuid())
-    categoryId String @unique
+  dbId       String @id @default(uuid())
+  categoryId String @unique
 
-    name  String
-    index Int
+  name  String
+  index Int
 
-    groupId String
-    group   Group  @relation(fields: [groupId], references: [groupId], onDelete: Cascade)
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [groupId], onDelete: Cascade)
 
-    boards      Board[]
-    permissions CategoryPermission[]
+  boards           Board[]
+  permissions      CategoryPermission[]
+  personalCategory PersonalCategory?
 
-    @@index([groupId])
-    @@index([index])
+  @@index([groupId])
+  @@index([index])
 }
 
 model Board {
-    dbId    String @id @default(uuid())
-    boardId String @unique
+  dbId    String @id @default(uuid())
+  boardId String @unique
 
-    name  String
-    index Int
+  name  String
+  index Int
 
-    version   Int       @default(0)
-    updatedAt DateTime  @default(now())
-    type      BoardType @default(Excalidraw)
+  version   Int       @default(0)
+  updatedAt DateTime  @default(now())
+  type      BoardType @default(Excalidraw)
 
-    scheduledForDeletion DateTime?
-    totalSizeBytes       Int       @default(0)
+  scheduledForDeletion DateTime?
+  totalSizeBytes       Int       @default(0)
 
-    categoryId String
-    category   Category @relation(fields: [categoryId], references: [categoryId], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [categoryId], onDelete: Cascade)
 
-    flashcardDeck FlashcardDeck?
+  flashcardDeck FlashcardDeck?
+  personalBoard PersonalBoard?
 
-    files           File[]
-    boardPermission BoardPermission[]
-    userActivities  UserBoardActivity[]
+  files           File[]
+  boardPermission BoardPermission[]
+  userActivities  UserBoardActivity[]
 
-    @@index([categoryId])
-    @@index([index])
+  @@index([categoryId])
+  @@index([index])
 }
 
 model UserBoardActivity {
-    dbId String @id @default(uuid())
+  dbId String @id @default(uuid())
 
-    userId String
-    user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
-    boardId String
-    board   Board  @relation(fields: [boardId], references: [boardId], onDelete: Cascade)
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [boardId], onDelete: Cascade)
 
-    totalSessions      Int      @default(0)
-    totalActiveSeconds Int      @default(0)
-    lastActivityAt     DateTime @default(now())
+  totalSessions      Int      @default(0)
+  totalActiveSeconds Int      @default(0)
+  lastActivityAt     DateTime @default(now())
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@unique([userId, boardId])
-    @@index([boardId])
-    @@index([lastActivityAt])
+  @@unique([userId, boardId])
+  @@index([boardId])
+  @@index([lastActivityAt])
 }
 
 model File {
-    dbId   String @id @default(uuid())
-    fileId String @unique
+  dbId   String @id @default(uuid())
+  fileId String @unique
 
-    mimeType  String
-    createdAt DateTime
-    sizeBytes Int
+  mimeType  String
+  createdAt DateTime
+  sizeBytes Int
 
-    boardId String
-    board   Board  @relation(fields: [boardId], references: [boardId], onDelete: Cascade)
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [boardId], onDelete: Cascade)
 
-    @@index([boardId])
+  @@index([boardId])
 }

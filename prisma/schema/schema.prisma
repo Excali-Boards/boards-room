@@ -1,62 +1,58 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-}
-
-generator tsPrisma {
-    provider = "ts-prisma-generator"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Platforms {
-    Microsoft
-    Discord
-    Google
-    GitHub
+  Microsoft
+  Discord
+  Google
+  GitHub
 }
 
 enum Device {
-    Desktop
-    Mobile
-    Tablet
-    Other
+  Desktop
+  Mobile
+  Tablet
+  Other
 }
 
 enum BoardType {
-    Excalidraw
-    Tldraw
+  Excalidraw
+  Tldraw
 }
 
 enum BoardRole {
-    BoardViewer
-    BoardCollaborator
+  BoardViewer
+  BoardCollaborator
 }
 
 enum CategoryRole {
-    CategoryViewer
-    CategoryCollaborator
-    CategoryManager
-    CategoryAdmin
+  CategoryViewer
+  CategoryCollaborator
+  CategoryManager
+  CategoryAdmin
 }
 
 enum GroupRole {
-    GroupViewer
-    GroupCollaborator
-    GroupManager
-    GroupAdmin
+  GroupViewer
+  GroupCollaborator
+  GroupManager
+  GroupAdmin
 }
 
 model AllEnumsModel {
-    dbId String @id @default(uuid())
+  dbId String @id @default(uuid())
 
-    platformEnum  Platforms
-    deviceEnum    Device
-    boardTypeEnum BoardType
+  platformEnum  Platforms
+  deviceEnum    Device
+  boardTypeEnum BoardType
 
-    boardRoleEnum    BoardRole
-    categoryRoleEnum CategoryRole
-    groupRoleEnum    GroupRole
+  boardRoleEnum    BoardRole
+  categoryRoleEnum CategoryRole
+  groupRoleEnum    GroupRole
 }

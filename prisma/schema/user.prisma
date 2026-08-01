@@ -1,57 +1,58 @@
 model User {
-    dbId   String @id @default(uuid())
-    userId String @unique
-    email  String @unique
+  dbId   String @id @default(uuid())
+  userId String @unique
+  email  String @unique
 
-    avatarUrl   String?
-    displayName String
+  avatarUrl   String?
+  displayName String
 
-    mainGroupId String?
+  mainGroupId String?
 
-    mainLoginType Platforms
-    loginMethods  LoginMethod[]
+  mainLoginType Platforms
+  loginMethods  LoginMethod[]
 
-    invitedBy String?
+  invitedBy String?
 
-    groupPermissions    GroupPermission[]
-    categoryPermissions CategoryPermission[]
-    boardPermissions    BoardPermission[]
+  groupPermissions    GroupPermission[]
+  categoryPermissions CategoryPermission[]
+  boardPermissions    BoardPermission[]
 
-    flashcardProgress DeckProgress[]
+  flashcardProgress DeckProgress[]
 
-    sessions        Session[]
-    createdEvents   Event[]
-    createdInvites  Invite[]
-    boardActivities UserBoardActivity[]
+  sessions          Session[]
+  createdEvents     Event[]
+  createdInvites    Invite[]
+  boardActivities   UserBoardActivity[]
+  personalWorkspace PersonalWorkspace?
 }
 
 model Session {
-    dbId String @id @default(uuid())
+  dbId String @id @default(uuid())
 
-    token String @unique
+  token String @unique
 
-    device            Device?
-    locationEncrypted String?
+  device            Device?
+  locationEncrypted String?
 
-    userId String
-    user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
-    createdAt DateTime @default(now())
-    expiresAt DateTime
-    lastUsed  DateTime @default(now())
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  lastUsed  DateTime @default(now())
 
-    @@index([userId])
-    @@index([expiresAt])
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model LoginMethod {
-    dbId String @id @default(uuid())
+  dbId String @id @default(uuid())
 
-    platform      Platforms
-    platformEmail String
+  platform      Platforms
+  platformEmail String
 
-    userId String
-    user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
-    @@unique([platform, platformEmail])
+  @@unique([platform, platformEmail])
 }

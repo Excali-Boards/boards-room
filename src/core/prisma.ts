@@ -1,22 +1,29 @@
 import { recursiveDateConversion } from '../modules/functions.js';
 import { BoardsManager } from '../index.js';
-import { TSPrisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import config from './config.js';
 import crypto from 'crypto';
 
 const readOperations = ['findUnique', 'findFirst', 'findMany', 'count', 'aggregate'] as const;
 const writeOperations = ['create', 'update', 'upsert', 'delete', 'createMany', 'updateMany', 'deleteMany'] as const;
 
+type ModelName = 'user' | 'session' | 'loginMethod' | 'group' | 'category' | 'board' | 'file' | 'event' | 'flashcardDeck' | 'flashcardCard' | 'deckProgress' | 'groupPermission' | 'categoryPermission' | 'boardPermission' | 'invite' | 'userBoardActivity';
+type Operation = typeof readOperations[number] | typeof writeOperations[number];
+type DelegateMethod<N extends ModelName, M extends Operation> = PrismaClient[N][M] extends (...args: infer A) => infer R ? (...args: A) => R : never;
+type DelegateArgs<N extends ModelName, M extends Operation> = Parameters<DelegateMethod<N, M>>[0];
+type PrismaOperation<M extends Operation> = M extends 'findUnique' ? 'findUnique' : M extends 'findFirst' ? 'findFirst' : M extends 'findMany' ? 'findMany' : M extends 'count' ? 'count' : M extends 'aggregate' ? 'aggregate' : M extends 'create' ? 'create' : M extends 'update' ? 'update' : M extends 'upsert' ? 'upsert' : M extends 'delete' ? 'delete' : M extends 'createMany' ? 'createMany' : M extends 'updateMany' ? 'updateMany' : 'deleteMany';
+type DbResult<N extends ModelName, M extends Operation, A> = Prisma.Result<PrismaClient[N], A, PrismaOperation<M>>;
+
 export async function db<
-	N extends TSPrisma.AllModelNamesLowercase,
-	M extends TSPrisma.AllPrismaMethodsLowercase,
-	T extends TSPrisma.AllArgs[N][M],
+	N extends ModelName,
+	M extends Operation,
+	A extends DelegateArgs<N, M>,
 >(
 	instance: BoardsManager,
 	modelName: N,
 	operation: M,
-	args: T | TSPrisma.Args<N, M, T>,
-): Promise<TSPrisma.Result<N, M, T>> {
+	args: A & DelegateArgs<N, M>,
+): Promise<DbResult<N, M, A>> {
 	const startTime = Date.now();
 	const isReadOp = readOperations.includes(operation as never);
 	const isWriteOp = writeOperations.includes(operation as never);
@@ -34,7 +41,7 @@ export async function db<
 			}
 		}
 
-		const res = await (instance.prisma[modelName][operation] as TSPrisma.Callable)(args) as never;
+		const res = await (instance.prisma[modelName][operation] as unknown as (value: A) => Promise<DbResult<N, M, A>>)(args);
 		if (typeof res === 'object' && res && 'stack' in res) {
 			throw new Error('An error occurred while trying to interact with the database.', {
 				cause: res,

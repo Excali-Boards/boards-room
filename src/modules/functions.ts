@@ -71,6 +71,36 @@ const cryptoOptions = {
 	},
 };
 
+const encryptionEnvelope = Buffer.from([0x42, 0x42, 0x32, 0x01]);
+const randomIvLength = 12;
+
+function encryptWithRandomIv(input: Buffer): Buffer {
+	const iv = randomBytes(randomIvLength);
+	const cipher = createCipheriv('aes-256-gcm', cryptoOptions.key, iv);
+	const encrypted = Buffer.concat([cipher.update(input), cipher.final()]);
+	return Buffer.concat([encryptionEnvelope, iv, encrypted, cipher.getAuthTag()]);
+}
+
+function decryptWithRandomIv(input: Buffer): Buffer {
+	const headerLength = encryptionEnvelope.length;
+	if (!input.subarray(0, headerLength).equals(encryptionEnvelope)) {
+		const encrypted = input.subarray(0, input.length - cryptoOptions.authTagLength);
+		const authTag = input.subarray(input.length - cryptoOptions.authTagLength);
+		const decipher = createDecipheriv('aes-256-gcm', cryptoOptions.key, cryptoOptions.iv);
+		decipher.setAuthTag(authTag);
+		return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+	}
+
+	const ivStart = headerLength;
+	const encryptedStart = ivStart + randomIvLength;
+	const authTagStart = input.length - cryptoOptions.authTagLength;
+	if (authTagStart <= encryptedStart) throw new Error('Invalid encrypted payload.');
+
+	const decipher = createDecipheriv('aes-256-gcm', cryptoOptions.key, input.subarray(ivStart, encryptedStart));
+	decipher.setAuthTag(input.subarray(authTagStart));
+	return Buffer.concat([decipher.update(input.subarray(encryptedStart, authTagStart)), decipher.final()]);
+}
+
 export const compressionUtils = {
 	compress: (data: unknown): Buffer => {
 		const binary = msgpackEncode(data);
@@ -84,23 +114,11 @@ export const compressionUtils = {
 
 	compressAndEncrypt: (data: unknown): Buffer => {
 		const compressed = compressionUtils.compress(data);
-
-		const cipher = createCipheriv('aes-256-gcm', cryptoOptions.key, cryptoOptions.iv);
-		const encrypted = Buffer.concat([cipher.update(compressed), cipher.final()]);
-		const authTag = cipher.getAuthTag();
-
-		return Buffer.concat([encrypted, authTag]);
+		return encryptWithRandomIv(compressed);
 	},
 
 	decompressAndDecrypt: <T>(input: Buffer): T => {
-		const encrypted = input.subarray(0, input.length - cryptoOptions.authTagLength);
-		const authTag = input.subarray(input.length - cryptoOptions.authTagLength);
-
-		const decipher = createDecipheriv('aes-256-gcm', cryptoOptions.key, cryptoOptions.iv);
-		decipher.setAuthTag(authTag);
-
-		const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-		return compressionUtils.decompress<T>(decrypted);
+		return compressionUtils.decompress<T>(decryptWithRandomIv(input));
 	},
 };
 
@@ -125,6 +143,9 @@ export const securityUtils = {
 		const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
 		return decrypted.toString('utf8');
 	},
+	// Use this for new encrypted values that do not need deterministic lookup.
+	encryptRandom: (input: string): string => encryptWithRandomIv(Buffer.from(input, 'utf8')).toString('hex'),
+	decryptRandom: (hex: string): string => decryptWithRandomIv(Buffer.from(hex, 'hex')).toString('utf8'),
 
 	hash: (text: string): string => {
 		return createHash('sha256').update(text).digest('hex');

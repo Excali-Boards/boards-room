@@ -87,10 +87,29 @@ export default class CacheService {
 	public async deletePattern(pattern: string): Promise<void> {
 		if (!this.isAvailable()) return;
 		try {
-			const keys = await this.client!.keys(pattern);
-			if (keys.length > 0) await this.client!.del(...keys);
+			let cursor = '0';
+			do {
+				const [nextCursor, keys] = await this.client!.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+				cursor = nextCursor;
+				if (keys.length > 0) await this.client!.del(...keys);
+			} while (cursor !== '0');
 		} catch {
 			// *
+		}
+	}
+
+	public async increment(key: string, ttlSeconds: number): Promise<number | null> {
+		if (!this.isAvailable()) return null;
+		try {
+			const count = await this.client!.eval(
+				'local current = redis.call("INCR", KEYS[1]); if current == 1 then redis.call("EXPIRE", KEYS[1], ARGV[1]); end; return current;',
+				1,
+				key,
+				ttlSeconds,
+			);
+			return typeof count === 'number' ? count : Number(count);
+		} catch {
+			return null;
 		}
 	}
 

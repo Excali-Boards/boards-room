@@ -109,25 +109,25 @@ export default class Routes {
 			const filePath = path.join(dir, file);
 			const stat = statSync(filePath);
 
-			if (stat.isDirectory()) this.loadRoutes(filePath);
-			else if (file.endsWith('.js')) {
-				import(`file://${filePath}`).then((m) => {
-					if (!m.default) return LoggerModule('API', `Route file ${file} has no default export.`, 'red');
-
-					if (Array.isArray(m.default)) {
-						for (const route of m.default) {
-							this.processRoute(route);
-						}
-					} else {
-						this.processRoute(m.default);
+			if (stat.isDirectory()) {
+				await this.loadRoutes(filePath);
+			} else if (file.endsWith('.js')) {
+				try {
+					const module = await import(`file://${filePath}`);
+					if (!module.default) {
+						LoggerModule('API', `Route file ${file} has no default export.`, 'red');
+						continue;
 					}
 
-					return;
-				}).catch((err) => {
+					for (const route of Array.isArray(module.default) ? module.default : [module.default]) {
+						this.processRoute(route);
+					}
+				} catch (error) {
+					const err = error instanceof Error ? error : new Error(String(error));
 					this.manager.prometheus.recordError('route_load_error', 'routes');
 					LoggerModule('API', `Error loading route file ${file}: ${err.message}`, 'red');
 					LoggerModule('Error', err.stack || err.message, 'red');
-				});
+				}
 			}
 		}
 	}
@@ -190,7 +190,6 @@ export default class Routes {
 			const ip = resolveClientIp((name) => c.req.header(name), connInfo.remote.address);
 			if (!ip) return json(c, 403, { error: 'Unable to determine client IP address.' });
 
-			const now = Date.now();
 			const routeKey = `${c.req.method}:${routePath(c) || c.req.path}`;
 			const cacheKey = `ratelimit:${routeKey}:${ip}`;
 			const ttlSeconds = Math.ceil(options.windowMs / 1000);
@@ -201,19 +200,11 @@ export default class Routes {
 			}
 
 			try {
-				const cached = await this.manager.cache.get<{ count: number; lastRequest: number; }>(cacheKey);
-				let record = cached || { count: 0, lastRequest: now };
+				const count = await this.manager.cache.increment(cacheKey, ttlSeconds);
+				if (count === null) return json(c, 503, { error: 'Service temporarily unavailable.' });
 
-				if (now - record.lastRequest > options.windowMs) {
-					record = { count: 1, lastRequest: now };
-				} else {
-					record.count++;
-				}
-
-				await this.manager.cache.set(cacheKey, record, ttlSeconds);
-
-				if (record.count > options.maxRequests) {
-					LoggerModule('Security', `Rate limit exceeded for IP: ${ip} on ${routeKey} (${record.count}/${options.maxRequests} requests in ${options.windowMs}ms window).`, 'yellow');
+				if (count > options.maxRequests) {
+					LoggerModule('Security', `Rate limit exceeded for IP: ${ip} on ${routeKey} (${count}/${options.maxRequests} requests in ${options.windowMs}ms window).`, 'yellow');
 					return json(c, 429, { error: 'Too many requests. Please try again later.' });
 				}
 			} catch (error) {

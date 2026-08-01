@@ -1,13 +1,119 @@
-import { isDeveloper, canManage, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel, canManageBoardWithIds, getUserHighestRole, PermissionHierarchy } from '../other/permissions.js';
+import { isDeveloper, canManage, canManagePermissions, getBoardAccessLevel, getCategoryAccessLevel, getGroupAccessLevel, canManageBoardWithIds, getUserHighestRole, PermissionHierarchy } from '../other/permissions.js';
+import { DBUserPartial, PersonalWorkspaceArgs, PersonalWorkspaceType } from '../other/vars.js';
 import { compressionUtils, parseZodError, securityUtils } from '../modules/functions.js';
 import config, { boardObject, nameObject } from '../core/config.js';
 import { db, invalidateCacheForWrite } from '../core/prisma.js';
 import { json, makeRoute } from '../services/routes.js';
-import { DBUserPartial } from '../other/vars.js';
 import manager from '../index.js';
 import { z } from 'zod';
 
 export default [
+	makeRoute({
+		path: '/personal',
+		method: 'GET',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			if (config.personalBoardsMode === 'none' && !c.var.isDev) return json(c, 404, { error: 'Personal boards are disabled.' });
+
+			const workspaces = c.var.isDev ? await manager.prisma.personalWorkspace.findMany(PersonalWorkspaceArgs) : null;
+			const workspace = c.var.isDev ? null : await manager.prisma.personalWorkspace.findUnique({ where: { userId: c.var.DBUser.userId }, ...PersonalWorkspaceArgs });
+
+			const mapWorkspace = (workspace: PersonalWorkspaceType) => ({
+				id: workspace.groupId,
+				owner: workspace.user,
+				boards: workspace.boards
+					.filter(({ categoryId }) => categoryId === null)
+					.map(({ board }) => ({ ...board, id: board.boardId })),
+				categories: workspace.categories.map((category) => ({
+					id: category.backingCategoryId,
+					name: category.name,
+					boards: category.boards.map(({ board }) => ({
+						...board, id: board.boardId, categoryId: category.backingCategoryId,
+					})),
+				})),
+			});
+
+			return json(c, 200, {
+				data: c.var.isDev ? {
+					owners: workspaces?.map(mapWorkspace) || [],
+				} : (workspace ? mapWorkspace(workspace) : null),
+			});
+		},
+	}),
+	makeRoute({
+		path: '/personal',
+		method: 'POST',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			const canCreatePersonal = config.personalBoardsMode === 'anyone' || (config.personalBoardsMode === 'devs' && c.var.isDev);
+			if (!canCreatePersonal) return json(c, 403, { error: 'You do not have permission to create personal boards.' });
+
+			const isValid = boardObject.extend({ categoryId: z.string().optional() }).safeParse(await c.req.json().catch(() => ({})));
+			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
+
+			const boardId = securityUtils.randomString(12);
+			const created = await manager.prisma.$transaction(async (tx) => {
+				let workspace = await tx.personalWorkspace.findUnique({ where: { userId: c.var.DBUser.userId }, select: { dbId: true, groupId: true, categories: { select: { dbId: true, categoryId: true, backingCategoryId: true } }, group: { select: { categories: { select: { categoryId: true } } } } } });
+				if (!workspace) {
+					const groupId = securityUtils.randomString(12); const backingCategoryId = securityUtils.randomString(12);
+					const groupIndex = await tx.group.aggregate({ _max: { index: true } });
+
+					await tx.group.create({ data: { groupId, name: 'Personal Boards', index: (groupIndex._max.index ?? -1) + 1, permissions: { create: { userId: c.var.DBUser.userId, role: 'GroupAdmin', grantedBy: c.var.DBUser.userId } }, categories: { create: { categoryId: backingCategoryId, name: 'Personal storage', index: 0 } } } });
+					workspace = await tx.personalWorkspace.create({ select: { dbId: true, groupId: true, categories: { select: { dbId: true, categoryId: true, backingCategoryId: true } }, group: { select: { categories: { select: { categoryId: true } } } } }, data: { userId: c.var.DBUser.userId, groupId } });
+				}
+
+				const selected = isValid.data.categoryId ? workspace.categories.find((category) => category.categoryId === isValid.data.categoryId || category.backingCategoryId === isValid.data.categoryId) : undefined;
+				if (isValid.data.categoryId && !selected) throw new Error('Personal category not found.');
+
+				const backingCategoryId = selected?.backingCategoryId || workspace.categories.find((category) => category.backingCategoryId)?.backingCategoryId || workspace.group.categories.find((category) => category.categoryId)?.categoryId;
+				if (!backingCategoryId) throw new Error('Personal backing category not found.');
+
+				const boardIndex = await tx.board.aggregate({ where: { categoryId: backingCategoryId }, _max: { index: true } });
+
+				await tx.board.create({ data: { boardId, name: isValid.data.name, type: isValid.data.type, categoryId: backingCategoryId, index: (boardIndex._max.index ?? -1) + 1 } });
+				await tx.personalBoard.create({ data: { boardId, workspaceId: workspace.dbId, categoryId: selected?.dbId || null } });
+
+				return { groupId: workspace.groupId, categoryId: selected?.backingCategoryId || backingCategoryId, boardId };
+			});
+
+			const uploaded = await manager.files.uploadBoardFile(boardId, compressionUtils.compressAndEncrypt(isValid.data.type === 'Excalidraw' ? [] : {}), 'application/octet-stream').catch(() => null);
+			if (!uploaded) { await manager.prisma.board.deleteMany({ where: { boardId } }).catch(() => null); return json(c, 500, { error: 'Failed to initialize personal board.' }); }
+
+			return json(c, 200, { data: created });
+		},
+	}),
+	makeRoute({
+		path: '/personal/categories',
+		method: 'POST',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			const canCreatePersonal = config.personalBoardsMode === 'anyone' || (config.personalBoardsMode === 'devs' && c.var.isDev);
+			if (!canCreatePersonal) return json(c, 403, { error: 'You do not have permission to create personal categories.' });
+
+			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));
+			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
+
+			const category = await manager.prisma.$transaction(async (tx) => {
+				const workspace = await tx.personalWorkspace.findUnique({ where: { userId: c.var.DBUser.userId }, select: { dbId: true, groupId: true } });
+				if (!workspace) throw new Error('Create a personal board before creating a category.');
+
+				const backingCategoryId = securityUtils.randomString(12); const categoryId = securityUtils.randomString(12);
+				const max = await tx.category.aggregate({ where: { groupId: workspace.groupId }, _max: { index: true } });
+				await tx.category.create({ data: { categoryId: backingCategoryId, name: isValid.data.name, groupId: workspace.groupId, index: (max._max.index ?? -1) + 1 } });
+
+				const personalMax = await tx.personalCategory.aggregate({ where: { workspaceId: workspace.dbId }, _max: { index: true } });
+				return tx.personalCategory.create({ select: { categoryId: true, name: true, backingCategoryId: true }, data: { categoryId, name: isValid.data.name, index: (personalMax._max.index ?? -1) + 1, workspaceId: workspace.dbId, backingCategoryId } });
+			});
+
+			return json(c, 200, { data: category });
+		},
+	}),
 	makeRoute({
 		path: '/groups/:groupId/categories/:categoryId/boards',
 		method: 'POST',
@@ -31,9 +137,13 @@ export default [
 			if (isValid.data.copyPermissionsFromBoardId) {
 				const sourceBoard = await db(manager, 'board', 'findUnique', {
 					where: { boardId: isValid.data.copyPermissionsFromBoardId },
-					select: { boardId: true },
+					select: { boardId: true, categoryId: true, category: { select: { groupId: true } } },
 				});
+
 				if (!sourceBoard) return json(c, 400, { error: 'Source board for permission copy not found.' });
+				if (!canManagePermissions(c.var.DBUser, { type: 'category', data: { categoryId, groupId } }) || !canManagePermissions(c.var.DBUser, { type: 'board', data: { boardId: sourceBoard.boardId, categoryId: sourceBoard.categoryId, groupId: sourceBoard.category.groupId } })) {
+					return json(c, 403, { error: 'You do not have permission to copy this board\'s permissions.' });
+				}
 			}
 
 			const totalBoards = await db(manager, 'board', 'findMany', { where: { categoryId, category: { groupId } }, select: { index: true } });
@@ -238,7 +348,6 @@ export default [
 		path: '/groups/:groupId/categories/:categoryId/boards/:boardId/move',
 		method: 'POST',
 		enabled: true,
-		devOnly: true,
 		auth: true,
 
 		handler: async (c) => {
@@ -251,9 +360,12 @@ export default [
 
 			const DBBoard = await db(manager, 'board', 'findUnique', { where: { boardId, categoryId, category: { groupId } }, select: { boardId: true, categoryId: true, index: true } });
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
+			if (!canManageBoardWithIds(c.var.DBUser, boardId, categoryId, groupId)) return json(c, 403, { error: 'You do not have permission to move this board.' });
 
-			const DBTargetCategory = await db(manager, 'category', 'findUnique', { where: { categoryId: isValid.data.targetCategoryId }, select: { categoryId: true, groupId: true } });
+			const DBTargetCategory = await db(manager, 'category', 'findUnique', { where: { categoryId: isValid.data.targetCategoryId }, select: { categoryId: true, groupId: true, group: { select: { personalWorkspace: { select: { dbId: true } } } } } });
 			if (!DBTargetCategory) return json(c, 404, { error: 'Target category not found.' });
+			if (DBTargetCategory.group.personalWorkspace) return json(c, 403, { error: 'Boards cannot be moved into personal boards.' });
+			if (!canManage(c.var.DBUser, { type: 'category', data: { categoryId: DBTargetCategory.categoryId, groupId: DBTargetCategory.groupId } })) return json(c, 403, { error: 'You do not have permission to move boards into this category.' });
 
 			if (DBBoard.categoryId === DBTargetCategory.categoryId) return json(c, 400, { error: 'Source and target category cannot be the same.' });
 
@@ -293,6 +405,7 @@ export default [
 					select: { boardId: true, categoryId: true, index: true },
 				});
 			});
+			await manager.prisma.personalBoard.deleteMany({ where: { boardId } });
 
 			await Promise.all([
 				invalidateCacheForWrite(manager, 'board'),

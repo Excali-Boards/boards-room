@@ -1,4 +1,4 @@
-import { canManage, getGroupAccessLevel, getCategoryAccessLevel, getUserHighestRole } from '../other/permissions.js';
+import { canManage, getGroupAccessLevel, getCategoryAccessLevel } from '../other/permissions.js';
 import { parseZodError, securityUtils } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { nameObject } from '../core/config.js';
@@ -16,12 +16,12 @@ export default [
 
 		handler: async (c) => {
 			const DBGroups = await db(manager, 'group', 'findMany', {
-				where: c.var.isDev ? undefined : {
-					OR: [
+				where: c.var.isDev ? { personalWorkspace: null } : {
+					AND: [{ personalWorkspace: null }, { OR: [
 						{ groupId: { in: c.var.DBUser.groupPermissions.map((g) => g.groupId) || [] } },
 						{ categories: { some: { categoryId: { in: c.var.DBUser.categoryPermissions.map((ca) => ca.categoryId) || [] } } } },
 						{ categories: { some: { boards: { some: { boardId: { in: c.var.DBUser.boardPermissions.map((b) => b.boardId) || [] } } } } } },
-					],
+					] }],
 				},
 				select: {
 					groupId: true,
@@ -54,12 +54,6 @@ export default [
 					},
 				},
 			}) || [];
-
-			const groupRoles = new Map();
-			for (const g of DBGroups) {
-				const role = getUserHighestRole(c.var.DBUser, { type: 'group', data: { groupId: g.groupId } });
-				groupRoles.set(g.groupId, role);
-			}
 
 			return json(c, 200, {
 				data: DBGroups.sort((a, b) => a.index - b.index).map((g) => ({
@@ -99,7 +93,7 @@ export default [
 				if (!sourceGroup) return json(c, 400, { error: 'Source group for permission copy not found.' });
 			}
 
-			const totalGroups = await db(manager, 'group', 'findMany', { select: { index: true } }) || [];
+			const totalGroups = await db(manager, 'group', 'findMany', { where: { personalWorkspace: null }, select: { index: true } }) || [];
 			const newGroupId = securityUtils.randomString(12);
 			const newGroup = await db(manager, 'group', 'create', {
 				select: { groupId: true },
@@ -147,7 +141,7 @@ export default [
 			const canReorderGroups = canManage(c.var.DBUser, { type: 'global', data: null });
 			if (!canReorderGroups) return json(c, 403, { error: 'You do not have permission to reorder groups.' });
 
-			const DBGroups = await db(manager, 'group', 'findMany', { where: { groupId: { in: isValid.data } } }) || [];
+			const DBGroups = await db(manager, 'group', 'findMany', { where: { groupId: { in: isValid.data }, personalWorkspace: null } }) || [];
 			if (DBGroups.length !== isValid.data.length) return json(c, 400, { error: 'Some groups do not exist.' });
 
 			const updatePromises = isValid.data.map((groupId, index) =>
@@ -219,12 +213,6 @@ export default [
 			});
 
 			if (!DBGroup) return json(c, 404, { error: 'Group not found.' });
-
-			const categoryRoles = new Map();
-			for (const cat of DBGroup.categories) {
-				const role = getUserHighestRole(c.var.DBUser, { type: 'category', data: { categoryId: cat.categoryId, groupId } });
-				categoryRoles.set(cat.categoryId, role);
-			}
 
 			return json(c, 200, {
 				data: {

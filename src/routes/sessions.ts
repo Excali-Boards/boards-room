@@ -26,7 +26,7 @@ export default [
 
 			const safeSessions = sessions.map((session) => ({
 				dbId: session.dbId,
-				location: session.locationEncrypted ? securityUtils.decrypt(session.locationEncrypted) : null,
+				location: session.locationEncrypted ? securityUtils.decryptRandom(session.locationEncrypted) : null,
 				tokenPreview: session.token.slice(0, 15) + '..', // Token is 128 characters long.
 				expiresAt: session.expiresAt,
 				createdAt: session.createdAt,
@@ -61,7 +61,7 @@ export default [
 			const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
 			const location = isValid.data.ip ? await manager.utils.getIpLocation(isValid.data.ip) : null;
-			const locationEncrypted = location ? securityUtils.encrypt(location) : null;
+			const locationEncrypted = location ? securityUtils.encryptRandom(location) : null;
 
 			await db(manager, 'session', 'create', {
 				data: {

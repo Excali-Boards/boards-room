@@ -200,6 +200,8 @@ export function canManagePermissions<A extends GlobalResourceType>(DBUser: DBUse
 				|| DBUser.groupPermissions.some((gp) => gp.groupId === groupId && gp.role === GroupRole.GroupAdmin);
 		}
 	}
+
+	return false;
 }
 
 export function canGrantRole(granterRole: UserRole, targetRole: UserRole): boolean {
@@ -591,6 +593,8 @@ export async function collectResourcePermissions(resourceType: ResourceType, res
 			};
 		}
 	}
+
+	return { usersWithAccess, resource: null };
 }
 
 export async function getPermissionCheckData<T extends ResourceType>(resourceType: T, resourceId: string, manager: BoardsManager): Promise<PermissionCheckData<T> | null> {
@@ -637,4 +641,6 @@ export async function getPermissionCheckData<T extends ResourceType>(resourceTyp
 			return { type: 'group', data: { groupId: resourceId } } as PermissionCheckData<T>;
 		}
 	}
+
+	return null;
 }

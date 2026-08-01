@@ -101,7 +101,7 @@ class BaseFiles {
 		return Buffer.from(base64Data, 'base64');
 	}
 
-	public async toBuffer(data: UploadFile['data']): Promise<Buffer<ArrayBufferLike>> {
+	public async toBuffer(data: UploadFile['data']): Promise<Buffer> {
 		if (Buffer.isBuffer(data)) return data;
 		if (typeof data === 'string') {
 			if (data.startsWith('data:')) return this.dataURLToBuffer(data);
@@ -188,7 +188,7 @@ class BaseFiles {
 					const boardId = prefix;
 					await db(this.manager, 'file', 'upsert', {
 						where: { fileId },
-						update: { sizeBytes: fileSize, mimeType: contentType },
+						update: { boardId, sizeBytes: fileSize, mimeType: contentType },
 						create: {
 							boardId,
 							fileId,
@@ -228,7 +228,7 @@ class BaseFiles {
 		const boardFileHead = await this.headFile(`boards/${boardId}.bin`);
 		const boardFileSize = boardFileHead?.ContentLength || 0;
 
-		const mediaFilesSize = await db(this.manager, 'file', 'aggregate', {
+		const mediaFilesSize = await this.manager.prisma.file.aggregate({
 			where: { boardId },
 			_sum: { sizeBytes: true },
 		});
@@ -293,7 +293,7 @@ export default class Files extends BaseFiles {
 
 		await db(this.manager, 'file', 'upsert', {
 			where: { fileId: fileData.id },
-			update: { mimeType: fileData.mimeType, sizeBytes: buffer.length, createdAt: new Date() },
+			update: { boardId, mimeType: fileData.mimeType, sizeBytes: buffer.length, createdAt: new Date() },
 			create: {
 				boardId,
 				fileId: fileData.id,
@@ -313,19 +313,21 @@ export default class Files extends BaseFiles {
 	): Promise<{ success: number; failed: number }> {
 		if (!files.length) return { success: 0, failed: 0 };
 
-		const existenceChecks = await Promise.all(files.map((file) => this.hasFile(`${boardId}/${file.id}`)));
-		const filesToUpload = files.filter((_, idx) => !existenceChecks[idx]);
+		const preparedFiles = await Promise.all(files.map(async (file) => ({
+			data: file,
+			buffer: await this.toBuffer(file.data),
+			exists: await this.hasFile(`${boardId}/${file.id}`),
+		})));
 
-		const results = await Promise.all(
-			filesToUpload.map(async (file) => {
-				const bufferFile = await this.toBuffer(file.data);
-				const result = await this.uploadMediaFile(boardId, file.id, bufferFile, file.mimeType, true).catch(() => null);
-				return { buffer: bufferFile, result, data: file };
-			}),
-		);
+		const results = await Promise.all(preparedFiles.map(async (file) => ({
+			...file,
+			result: file.exists
+				? true
+				: await this.uploadMediaFile(boardId, file.data.id, file.buffer, file.data.mimeType, true).catch(() => null),
+		})));
 
-		const failedUploads = results.filter((data) => data.result === null);
-		const successfulFiles = results.filter((data) => data.result !== null);
+		const failedUploads = results.filter((file) => file.result === null);
+		const successfulFiles = results.filter((file) => file.result !== null);
 
 		if (successfulFiles.length > 0) {
 			await this.manager.prisma
@@ -333,7 +335,7 @@ export default class Files extends BaseFiles {
 					successfulFiles.map((file) =>
 						this.manager.prisma.file.upsert({
 							where: { fileId: file.data.id },
-							update: { mimeType: file.data.mimeType, sizeBytes: file.buffer.length, createdAt: new Date() },
+							update: { boardId, mimeType: file.data.mimeType, sizeBytes: file.buffer.length, createdAt: new Date() },
 							create: {
 								boardId,
 								fileId: file.data.id,
@@ -350,7 +352,7 @@ export default class Files extends BaseFiles {
 			await this.updateBoardTotalSize(boardId);
 		}
 
-		return { success: results.length - failedUploads.length, failed: failedUploads.length };
+		return { success: successfulFiles.length, failed: failedUploads.length };
 	}
 
 	public async deleteMediaFiles(boardId: string, files: string[]): Promise<string[]> {

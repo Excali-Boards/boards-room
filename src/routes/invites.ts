@@ -4,7 +4,7 @@ import { parseZodError } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
 import { createInviteSchema } from './permissions.js';
 import { Invite } from '@prisma/client';
-import { db } from '../core/prisma.js';
+import { db, invalidateCacheForWrite } from '../core/prisma.js';
 import manager from '../index.js';
 
 export default [
@@ -216,7 +216,8 @@ export default [
 		handler: async (c) => {
 			const code = c.req.param('code');
 
-			const DBInvite = await db(manager, 'invite', 'findUnique', { where: { code } });
+			// Invite usage is concurrency-sensitive, so it must not use the read cache.
+			const DBInvite = await manager.prisma.invite.findUnique({ where: { code } });
 			if (!DBInvite) return json(c, 404, { error: 'Invite not found.' });
 
 			if (DBInvite.expiresAt && DBInvite.expiresAt < new Date()) {
@@ -246,7 +247,30 @@ export default [
 				return json(c, 400, { error: 'You already have equal or higher permissions for all resources in this invite.' });
 			}
 
-			await applyPermissionGrants(manager, permissionResult, DBInvite.createdBy, userId);
+			const claimedInvite = await manager.prisma.invite.updateMany({
+				where: {
+					dbId: DBInvite.dbId,
+					currentUses: DBInvite.currentUses,
+					expiresAt: { gt: new Date() },
+					maxUses: { gt: DBInvite.currentUses },
+				},
+				data: { currentUses: { increment: 1 } },
+			});
+			if (claimedInvite.count !== 1) {
+				return json(c, 400, { error: 'This invite has expired, reached its usage limit, or was used by someone else. Please try again.' });
+			}
+			await invalidateCacheForWrite(manager, 'invite');
+
+			try {
+				await applyPermissionGrants(manager, permissionResult, DBInvite.createdBy, userId);
+			} catch (error) {
+				await manager.prisma.invite.updateMany({
+					where: { dbId: DBInvite.dbId },
+					data: { currentUses: { decrement: 1 } },
+				}).catch(() => null);
+				await invalidateCacheForWrite(manager, 'invite');
+				throw error;
+			}
 
 			if (!c.var.DBUser.invitedBy) {
 				await db(manager, 'user', 'update', {
@@ -255,7 +279,7 @@ export default [
 				}).catch(() => null);
 			}
 
-			await db(manager, 'invite', 'update', { where: { dbId: DBInvite.dbId }, data: { currentUses: { increment: 1 } } }).catch(() => null); const allGrantedPermissions = [
+			const allGrantedPermissions = [
 				...permissionResult.newPermissions,
 				...permissionResult.updatedPermissions.map((update) => ({ type: update.type, resourceId: update.resourceId, role: update.role })),
 			];
@@ -285,8 +309,9 @@ export default [
 				}) : [],
 			]);
 
-			if (DBInvite.maxUses && DBInvite.currentUses + 1 >= DBInvite.maxUses) {
-				await db(manager, 'invite', 'delete', { where: { dbId: DBInvite.dbId } }).catch(() => null);
+			if (DBInvite.currentUses + 1 >= DBInvite.maxUses) {
+				await manager.prisma.invite.deleteMany({ where: { dbId: DBInvite.dbId, currentUses: DBInvite.currentUses + 1 } });
+				await invalidateCacheForWrite(manager, 'invite');
 			}
 
 			return json(c, 200, {

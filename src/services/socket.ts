@@ -18,15 +18,26 @@ import { Readable } from 'node:stream';
 import { db } from '../core/prisma.js';
 
 export default class SocketServer {
-	private honoServer: ServerType;
+	private honoServer: ServerType | null = null;
 	public connectionTimes = new Map<string, NodeJS.Timeout>();
-	public io: Server<ClientToServerEvents, ServerToClientEvents>;
+	public io = new Server<ClientToServerEvents, ServerToClientEvents>({
+		maxHttpBufferSize: performanceConstants.socketMaxBufferSize,
+		parser: msgPack,
+		cors: {
+			credentials: true,
+			methods: ['GET', 'POST'],
+			origin: config.allowedOrigins,
+			allowedHeaders: ['Content-Type', 'Authorization'],
+		},
+	});
 
 	public recentlyActiveRooms = new CustomMap<string, RecentlyActiveRoom>();
 	public excalidrawSocket = new ExcalidrawSocket(this);
 	public tldrawSocket = new TldrawSocket(this);
 
-	constructor (readonly manager: BoardsManager) {
+	constructor (readonly manager: BoardsManager) { }
+
+	public async init(): Promise<void> {
 		this.honoServer = serve({
 			fetch: this.manager.hono.fetch,
 			port: config.port,
@@ -34,19 +45,7 @@ export default class SocketServer {
 			LoggerModule('Hono', `🚀 Server started on port ${info.port}!\n`, 'green');
 		});
 
-		this.io = new Server(this.honoServer, {
-			maxHttpBufferSize: performanceConstants.socketMaxBufferSize,
-			parser: msgPack,
-			cors: {
-				credentials: true,
-				methods: ['GET', 'POST'],
-				origin: config.allowedOrigins,
-				allowedHeaders: ['Content-Type', 'Authorization'],
-			},
-		});
-	}
-
-	public async init(): Promise<void> {
+		this.io.attach(this.honoServer);
 		this.initSavingBoards();
 		this.handleConnection();
 	}
@@ -145,24 +144,15 @@ export default class SocketServer {
 
 		const { windowMs, maxRequests } = config.rateLimiting.options;
 
-		const now = Date.now();
 		const cacheKey = `ratelimit:socket:${ip}`;
 		const ttlSeconds = Math.ceil(windowMs / 1000);
 
 		try {
-			const cached = await this.manager.cache.get<{ count: number; lastRequest: number; }>(cacheKey);
-			let record = cached || { count: 0, lastRequest: now };
+			const count = await this.manager.cache.increment(cacheKey, ttlSeconds);
+			if (count === null) return false;
 
-			if (now - record.lastRequest > windowMs) {
-				record = { count: 1, lastRequest: now };
-			} else {
-				record.count++;
-			}
-
-			await this.manager.cache.set(cacheKey, record, ttlSeconds);
-
-			if (record.count > maxRequests) {
-				LoggerModule('Security', `Socket rate limit exceeded for IP: ${ip} (${record.count}/${maxRequests} requests in ${windowMs}ms window)`, 'yellow');
+			if (count > maxRequests) {
+				LoggerModule('Security', `Socket rate limit exceeded for IP: ${ip} (${count}/${maxRequests} requests in ${windowMs}ms window)`, 'yellow');
 				return false;
 			}
 		} catch (error) {

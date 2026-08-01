@@ -1,6 +1,5 @@
 import { getAccessLevel, getUserHighestRole } from '../other/permissions.js';
 import { json, makeRoute } from '../services/routes.js';
-import { db } from '../core/prisma.js';
 import manager from '../index.js';
 
 export default [
@@ -11,13 +10,17 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const DBGroups = await db(manager, 'group', 'findMany', {
-				where: c.var.isDev ? undefined : {
-					OR: [
-						{ groupId: { in: c.var.DBUser.groupPermissions.map((g) => g.groupId) || [] } },
-						{ categories: { some: { categoryId: { in: c.var.DBUser.categoryPermissions.map((ca) => ca.categoryId) || [] } } } },
-						{ categories: { some: { boards: { some: { boardId: { in: c.var.DBUser.boardPermissions.map((b) => b.boardId) || [] } } } } } },
-					],
+			const DBGroups = await manager.prisma.group.findMany({
+				where: c.var.isDev ? { personalWorkspace: null } : {
+					AND: [{
+						personalWorkspace: null,
+					}, {
+						OR: [
+							{ groupId: { in: c.var.DBUser.groupPermissions.map((g) => g.groupId) || [] } },
+							{ categories: { some: { categoryId: { in: c.var.DBUser.categoryPermissions.map((ca) => ca.categoryId) || [] } } } },
+							{ categories: { some: { boards: { some: { boardId: { in: c.var.DBUser.boardPermissions.map((b) => b.boardId) || [] } } } } } },
+						],
+					}],
 				},
 				select: {
 					groupId: true,
@@ -82,6 +85,7 @@ export default [
 					id: group.groupId,
 					name: group.name,
 					index: group.index,
+					isPersonal: false,
 					accessLevel: getAccessLevel(c.var.DBUser, { type: 'group', data: { groupId: group.groupId } }, groupRoles.get(group.groupId) || undefined),
 					categories: group.categories.map((category) => ({
 						id: category.categoryId,
