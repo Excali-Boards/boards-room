@@ -15,7 +15,7 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			if (config.personalBoardsMode === 'none' && !c.var.isDev) return json(c, 404, { error: 'Personal boards are disabled.' });
+			if (!config.personalBoardsEnabled && !c.var.isDev) return json(c, 404, { error: 'Personal boards are disabled.' });
 
 			const workspaces = c.var.isDev ? await manager.prisma.personalWorkspace.findMany(PersonalWorkspaceArgs) : null;
 			const workspace = c.var.isDev ? null : await manager.prisma.personalWorkspace.findUnique({ where: { userId: c.var.DBUser.userId }, ...PersonalWorkspaceArgs });
@@ -49,7 +49,7 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const canCreatePersonal = config.personalBoardsMode === 'anyone' || (config.personalBoardsMode === 'devs' && c.var.isDev);
+			const canCreatePersonal = config.personalBoardsEnabled || c.var.isDev;
 			if (!canCreatePersonal) return json(c, 403, { error: 'You do not have permission to create personal boards.' });
 
 			const isValid = boardObject.extend({ categoryId: z.string().optional() }).safeParse(await c.req.json().catch(() => ({})));
@@ -93,7 +93,7 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const canCreatePersonal = config.personalBoardsMode === 'anyone' || (config.personalBoardsMode === 'devs' && c.var.isDev);
+			const canCreatePersonal = config.personalBoardsEnabled || c.var.isDev;
 			if (!canCreatePersonal) return json(c, 403, { error: 'You do not have permission to create personal categories.' });
 
 			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));

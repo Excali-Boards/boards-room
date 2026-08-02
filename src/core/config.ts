@@ -10,7 +10,7 @@ const config = {
 
 	apiToken: process.env.API_TOKEN!,
 	databaseUrl: process.env.DATABASE_URL!,
-	personalBoardsMode: (process.env.PERSONAL_BOARDS_MODE || 'none') as 'none' | 'devs' | 'anyone',
+	personalBoardsEnabled: process.env.PERSONAL_BOARDS === 'true',
 
 	port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3004,
 	developers: process.env.DEVELOPERS?.split(',') || [],
@@ -59,7 +59,7 @@ const ConfigSchema = z.object({
 
 	apiToken: z.string(),
 	databaseUrl: z.string(),
-	personalBoardsMode: z.enum(['none', 'devs', 'anyone']),
+	personalBoardsEnabled: z.boolean(),
 
 	port: z.number().int().min(1).max(65535),
 	developers: z.array(z.string()),

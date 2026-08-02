@@ -1,6 +1,6 @@
 import { parseZodError } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
-import { allowedPlatforms } from '../core/config.js';
+import config, { allowedPlatforms } from '../core/config.js';
 import { DBUserSelectArgs } from '../other/vars.js';
 import { Platforms, User } from '@prisma/client';
 import { db } from '../core/prisma.js';
@@ -20,6 +20,7 @@ export default [
 				data: {
 					...c.var.DBUser,
 					isDev: c.var.isDev,
+					personalBoardsEnabled: config.personalBoardsEnabled || c.var.isDev,
 				},
 			});
 		},
