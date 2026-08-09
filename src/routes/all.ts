@@ -1,5 +1,7 @@
 import { getAccessLevel, getUserHighestRole } from '../other/permissions.js';
+import { PersonalWorkspaceArgs } from 'src/other/vars.js';
 import { json, makeRoute } from '../services/routes.js';
+import { mapWorkspace } from './personal.js';
 import manager from '../index.js';
 
 export default [
@@ -103,6 +105,22 @@ export default [
 						})).sort((a, b) => a.index - b.index),
 					})).sort((a, b) => a.index - b.index),
 				})).sort((a, b) => a.index - b.index),
+			});
+		},
+	}),
+	makeRoute({
+		path: '/all/personal',
+		method: 'GET',
+		enabled: true,
+		auth: true,
+
+		handler: async (c) => {
+			if (!c.var.isDev) return json(c, 403, { error: 'Only developers can view all personal boards.' });
+
+			const workspaces = await manager.prisma.personalWorkspace.findMany(PersonalWorkspaceArgs);
+
+			return json(c, 200, {
+				data: workspaces.map(mapWorkspace),
 			});
 		},
 	}),

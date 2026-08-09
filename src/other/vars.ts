@@ -60,22 +60,6 @@ export const PersonalWorkspaceArgs = {
 				avatarUrl: true,
 			},
 		},
-		boards: {
-			select: {
-				categoryId: true,
-				board: {
-					select: {
-						boardId: true,
-						categoryId: true,
-						name: true,
-						type: true,
-						index: true,
-						totalSizeBytes: true,
-						scheduledForDeletion: true,
-					},
-				},
-			},
-		},
 		categories: {
 			orderBy: { index: 'asc' },
 			select: {
