@@ -1,5 +1,5 @@
 import { getAccessLevel, getUserHighestRole } from '../other/permissions.js';
-import { PersonalWorkspaceArgs } from 'src/other/vars.js';
+import { PersonalWorkspaceArgs } from '../other/vars.js';
 import { json, makeRoute } from '../services/routes.js';
 import { mapWorkspace } from './personal.js';
 import manager from '../index.js';
