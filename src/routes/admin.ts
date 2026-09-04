@@ -7,6 +7,59 @@ import manager from '../index.js';
 
 export default [
 	makeRoute({
+		path: '/admin/boards',
+		method: 'GET',
+		enabled: true,
+		devOnly: true,
+		auth: true,
+
+		handler: async (c) => {
+			const boardIds = await manager.files.getBoardFileIds();
+			if (!boardIds) return json(c, 500, { error: 'Failed to retrieve board files from S3.' });
+
+			const DBBoards = await manager.prisma.board.findMany({
+				where: { boardId: { in: boardIds } },
+				select: {
+					boardId: true,
+					name: true,
+					type: true,
+					categoryId: true,
+					category: {
+						select: {
+							categoryId: true,
+							name: true,
+							groupId: true,
+							group: { select: { groupId: true, name: true, personalWorkspace: { select: { userId: true } } } },
+						},
+					},
+				},
+			});
+
+			const boardsById = new Map(DBBoards.map((board) => [board.boardId, board]));
+			return json(c, 200, {
+				data: boardIds.map((boardId) => {
+					const board = boardsById.get(boardId);
+					if (!board) return { boardId, board: null };
+
+					return {
+						boardId,
+						board: {
+							id: board.boardId,
+							name: board.name,
+							type: board.type,
+							groupId: board.category.group.groupId,
+							groupName: board.category.group.name,
+							categoryId: board.category.categoryId,
+							categoryName: board.category.name,
+							isPersonal: board.category.group.personalWorkspace !== null,
+							userId: board.category.group.personalWorkspace?.userId || null,
+						},
+					};
+				}),
+			});
+		},
+	}),
+	makeRoute({
 		path: '/admin/rooms',
 		method: 'GET',
 		enabled: true,

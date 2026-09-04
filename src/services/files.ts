@@ -252,6 +252,28 @@ export default class Files extends BaseFiles {
 		return this.getFile(`boards/${boardId}.bin`);
 	}
 
+	public async getBoardFileIds(): Promise<string[] | null> {
+		const boardIds: string[] = [];
+		let continuationToken: string | undefined;
+
+		do {
+			const result = await this.getAllFiles('boards/', continuationToken);
+			if (!result) return null;
+
+			for (const object of result.Contents || []) {
+				const key = object.Key || '';
+				if (!key.startsWith('boards/') || !key.endsWith('.bin')) continue;
+
+				const boardId = key.slice('boards/'.length, -'.bin'.length);
+				if (boardId) boardIds.push(boardId);
+			}
+
+			continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+		} while (continuationToken);
+
+		return [...new Set(boardIds)];
+	}
+
 	public async getMediaFile(boardId: string, fileId: string): Promise<GetObjectCommandOutput | null> {
 		return this.getFile(`${boardId}/${fileId}`);
 	}
