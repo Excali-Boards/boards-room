@@ -152,6 +152,7 @@ export default [
 					userId: c.var.DBUser.userId,
 					sessionToken,
 					sessionExpiresAt,
+					qrLoginRedirectDelay: c.var.DBUser.qrLoginRedirectDelay,
 					now,
 				});
 			} catch {
@@ -225,7 +226,14 @@ export default [
 
 			await trimSessions(state.approvedByUserId, state.sessionToken);
 			c.header('Cache-Control', 'no-store');
-			return json(c, 200, { data: { status: 'approved' as const, token: state.sessionToken, expiresAt: sessionExpiresAt } });
+			return json(c, 200, {
+				data: {
+					status: 'approved' as const,
+					token: state.sessionToken,
+					expiresAt: sessionExpiresAt,
+					redirectDelay: state.qrLoginRedirectDelay !== 'false',
+				},
+			});
 		},
 	}),
 ];

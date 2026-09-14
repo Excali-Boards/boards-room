@@ -28,6 +28,7 @@ type DecideQrChallengeInput = {
 	userId: string;
 	sessionToken: string;
 	sessionExpiresAt: number;
+	qrLoginRedirectDelay: boolean;
 	now: number;
 };
 
@@ -45,7 +46,7 @@ local status = redis.call('HGET', KEYS[2], 'status')
 local expiresAt = tonumber(redis.call('HGET', KEYS[2], 'expiresAt') or '0')
 if status ~= 'pending' or expiresAt <= tonumber(ARGV[1]) then return 0 end
 if ARGV[2] == 'approve' then
-  redis.call('HSET', KEYS[2], 'status', 'approved', 'approvedByUserId', ARGV[3], 'sessionToken', ARGV[4], 'sessionExpiresAt', ARGV[5])
+  redis.call('HSET', KEYS[2], 'status', 'approved', 'approvedByUserId', ARGV[3], 'sessionToken', ARGV[4], 'sessionExpiresAt', ARGV[5], 'qrLoginRedirectDelay', ARGV[7])
 else
   redis.call('HSET', KEYS[2], 'status', 'denied')
 end
@@ -180,6 +181,7 @@ export default class CacheService {
 				input.sessionToken,
 				String(input.sessionExpiresAt),
 				input.deviceHash,
+				String(input.qrLoginRedirectDelay),
 			);
 			return Number(result) === 1;
 		} catch {

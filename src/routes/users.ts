@@ -165,6 +165,8 @@ export async function updateUserInfo(userId: string, data: Partial<UserInput>) {
 		updateData.mainGroupId = data.mainGroupId;
 	}
 
+	if (data.qrLoginRedirectDelay !== undefined) updateData.qrLoginRedirectDelay = data.qrLoginRedirectDelay;
+
 	if (Object.keys(updateData).length > 0) {
 		await db(manager, 'user', 'update', {
 			where: { userId },
@@ -202,4 +204,5 @@ export const userSchema = z.object({
 	platform: z.enum(Platforms).optional(),
 	mainGroupId: z.string().optional().nullable(),
 	displayName: z.string().min(3).max(40).optional(),
+	qrLoginRedirectDelay: z.boolean().optional(),
 });
