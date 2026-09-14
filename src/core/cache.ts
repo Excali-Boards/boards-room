@@ -8,6 +8,50 @@ export type DbCacheOptions = {
 	ttl?: number;
 };
 
+type QrChallengeDecision = 'approve' | 'deny';
+
+type CreateQrChallengeInput = {
+	challengeKey: string;
+	codeKey: string;
+	userCode: string;
+	expiresAt: number;
+	requestDevice: string;
+	deviceHash: string;
+	ttlSeconds: number;
+};
+
+type DecideQrChallengeInput = {
+	codeKey: string;
+	challengeKey: string;
+	deviceHash: string;
+	decision: QrChallengeDecision;
+	userId: string;
+	sessionToken: string;
+	sessionExpiresAt: number;
+	now: number;
+};
+
+const createQrChallengeScript = `
+if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+if redis.call('SET', KEYS[2], ARGV[4], 'EX', ARGV[5], 'NX') == false then return 0 end
+redis.call('HSET', KEYS[1], 'status', 'pending', 'userCode', ARGV[1], 'expiresAt', ARGV[2], 'requestDevice', ARGV[3])
+redis.call('EXPIRE', KEYS[1], ARGV[5])
+return 1
+`;
+
+const decideQrChallengeScript = `
+if redis.call('GET', KEYS[1]) ~= ARGV[6] or redis.call('EXISTS', KEYS[2]) == 0 then return 0 end
+local status = redis.call('HGET', KEYS[2], 'status')
+local expiresAt = tonumber(redis.call('HGET', KEYS[2], 'expiresAt') or '0')
+if status ~= 'pending' or expiresAt <= tonumber(ARGV[1]) then return 0 end
+if ARGV[2] == 'approve' then
+  redis.call('HSET', KEYS[2], 'status', 'approved', 'approvedByUserId', ARGV[3], 'sessionToken', ARGV[4], 'sessionExpiresAt', ARGV[5])
+else
+  redis.call('HSET', KEYS[2], 'status', 'denied')
+end
+return 1
+`;
+
 export default class CacheService {
 	private client: Valkey | null = null;
 	private isConnected = false;
@@ -61,6 +105,85 @@ export default class CacheService {
 			return value ? (JSON.parse(value) as T) : null;
 		} catch {
 			return null;
+		}
+	}
+
+	public async getRaw(key: string): Promise<string | null> {
+		if (!this.isAvailable()) return null;
+		try {
+			return await this.client!.get(key);
+		} catch {
+			return null;
+		}
+	}
+
+	public async getHash(key: string): Promise<Record<string, string> | null> {
+		if (!this.isAvailable()) return null;
+		try {
+			const value = await this.client!.hgetall(key);
+			return Object.keys(value).length ? value : null;
+		} catch {
+			return null;
+		}
+	}
+
+	public async getRawStrict(key: string): Promise<string | null> {
+		if (!this.isAvailable()) throw new Error('Cache unavailable.');
+		try {
+			return await this.client!.get(key);
+		} catch {
+			throw new Error('Cache unavailable.');
+		}
+	}
+
+	public async getHashStrict(key: string): Promise<Record<string, string> | null> {
+		if (!this.isAvailable()) throw new Error('Cache unavailable.');
+		try {
+			const value = await this.client!.hgetall(key);
+			return Object.keys(value).length ? value : null;
+		} catch {
+			throw new Error('Cache unavailable.');
+		}
+	}
+
+	public async createQrChallenge(input: CreateQrChallengeInput): Promise<boolean> {
+		if (!this.isAvailable()) throw new Error('Cache unavailable.');
+		try {
+			const result = await this.client!.eval(
+				createQrChallengeScript,
+				2,
+				input.challengeKey,
+				input.codeKey,
+				input.userCode,
+				String(input.expiresAt),
+				input.requestDevice,
+				input.deviceHash,
+				String(input.ttlSeconds),
+			);
+			return Number(result) === 1;
+		} catch {
+			throw new Error('Cache unavailable.');
+		}
+	}
+
+	public async decideQrChallenge(input: DecideQrChallengeInput): Promise<boolean> {
+		if (!this.isAvailable()) throw new Error('Cache unavailable.');
+		try {
+			const result = await this.client!.eval(
+				decideQrChallengeScript,
+				2,
+				input.codeKey,
+				input.challengeKey,
+				String(input.now),
+				input.decision,
+				input.userId,
+				input.sessionToken,
+				String(input.sessionExpiresAt),
+				input.deviceHash,
+			);
+			return Number(result) === 1;
+		} catch {
+			throw new Error('Cache unavailable.');
 		}
 	}
 

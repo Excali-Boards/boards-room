@@ -7,7 +7,7 @@ import crypto from 'crypto';
 const readOperations = ['findUnique', 'findFirst', 'findMany', 'count', 'aggregate'] as const;
 const writeOperations = ['create', 'update', 'upsert', 'delete', 'createMany', 'updateMany', 'deleteMany'] as const;
 
-type ModelName = 'user' | 'session' | 'qrLoginChallenge' | 'loginMethod' | 'group' | 'category' | 'board' | 'file' | 'event' | 'flashcardDeck' | 'flashcardCard' | 'deckProgress' | 'groupPermission' | 'categoryPermission' | 'boardPermission' | 'invite' | 'userBoardActivity';
+type ModelName = 'user' | 'session' | 'loginMethod' | 'group' | 'category' | 'board' | 'file' | 'event' | 'flashcardDeck' | 'flashcardCard' | 'deckProgress' | 'groupPermission' | 'categoryPermission' | 'boardPermission' | 'invite' | 'userBoardActivity';
 type Operation = typeof readOperations[number] | typeof writeOperations[number];
 type DelegateMethod<N extends ModelName, M extends Operation> = PrismaClient[N][M] extends (...args: infer A) => infer R ? (...args: A) => R : never;
 type DelegateArgs<N extends ModelName, M extends Operation> = Parameters<DelegateMethod<N, M>>[0];
@@ -88,8 +88,6 @@ export function getModelRelations(modelName: string): string[] {
 		user: ['session', 'loginMethod', 'groupPermission', 'categoryPermission', 'boardPermission', 'userBoardActivity', 'event', 'invite', 'deckProgress'],
 		session: ['user'],
 		loginMethod: ['user'],
-		qrLoginChallenge: [],
-
 		// Hierarchy: Group -> Category -> Board
 		group: ['category', 'groupPermission', 'event'],
 		category: ['group', 'board', 'categoryPermission'],
