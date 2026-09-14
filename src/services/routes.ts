@@ -165,7 +165,7 @@ export default class Routes {
 			}
 
 			// If the session is set to expire in less than 24 hours.
-			if (session.expiresAt.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+			if (!session.isQrLogin && session.expiresAt.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
 				updateData.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 			}
 

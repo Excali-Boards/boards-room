@@ -11,6 +11,7 @@ const config = {
 	apiToken: process.env.API_TOKEN!,
 	databaseUrl: process.env.DATABASE_URL!,
 	personalBoardsEnabled: process.env.PERSONAL_BOARDS === 'true',
+	maxActiveSessions: process.env.MAX_ACTIVE_SESSIONS ? parseInt(process.env.MAX_ACTIVE_SESSIONS, 10) : 10,
 
 	port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3004,
 	developers: process.env.DEVELOPERS?.split(',') || [],
@@ -60,6 +61,7 @@ const ConfigSchema = z.object({
 	apiToken: z.string(),
 	databaseUrl: z.string(),
 	personalBoardsEnabled: z.boolean(),
+	maxActiveSessions: z.number().int().min(1).max(100),
 
 	port: z.number().int().min(1).max(65535),
 	developers: z.array(z.string()),

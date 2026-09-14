@@ -17,7 +17,7 @@ export default [
 		handler: async (c) => {
 			const sessions = await db(manager, 'session', 'findMany', {
 				where: { userId: c.var.DBUser.userId, expiresAt: { gt: new Date() } },
-				select: { dbId: true, token: true, expiresAt: true, locationEncrypted: true, createdAt: true, lastUsed: true, device: true },
+				select: { dbId: true, token: true, expiresAt: true, locationEncrypted: true, createdAt: true, lastUsed: true, device: true, isQrLogin: true },
 				orderBy: { lastUsed: 'desc' },
 			}) || [];
 
@@ -32,6 +32,7 @@ export default [
 				createdAt: session.createdAt,
 				lastUsed: session.lastUsed,
 				device: session.device,
+				isQrLogin: session.isQrLogin,
 			}));
 
 			return json(c, 200, {
@@ -66,16 +67,14 @@ export default [
 			await db(manager, 'session', 'create', {
 				data: {
 					token,
+					device: isValid.data.device,
 					locationEncrypted,
 					userId: DBUser.userId,
 					expiresAt,
 				},
 			});
 
-			if (DBUser.sessions && DBUser.sessions.length >= 5) {
-				const oldestSession = DBUser.sessions.sort((a, b) => a.lastUsed.getTime() - b.lastUsed.getTime())[0];
-				if (oldestSession) await db(manager, 'session', 'delete', { where: { dbId: oldestSession.dbId } });
-			}
+			await trimSessions(DBUser.userId, token);
 
 			return json(c, 200, {
 				data: {
@@ -132,33 +131,28 @@ export default [
 	}),
 ];
 
-// Schemas.
-export type SessionInput = z.infer<typeof sessionSchema>;
-export const sessionSchema = z.object({
-	platform: z.enum(Platforms),
-	email: z.email(),
-	displayName: z.string(),
-	avatarUrl: z.url().optional().nullable(),
-	currentUserId: z.string().optional(),
-	refreshProfile: z.boolean().optional(),
-	device: z.enum(Device).optional(),
-	ip: z.string().optional(),
-});
-
-export type SessionDeleteInput = z.infer<typeof sessionDeleteSchema>;
-export const sessionDeleteSchema = z.object({
-	dbId: z.string(),
-});
-
-export type UnlinkLoginMethodInput = z.infer<typeof unlinkLoginMethodSchema>;
-export const unlinkLoginMethodSchema = z.object({
-	platform: z.enum(Platforms),
-});
-
-// Types and functions.
+// Functions.
 export type SessionOutput = Pick<DBUserPartialType, 'userId' | 'email' | 'displayName' | 'avatarUrl'> & {
 	sessions: { dbId: string; lastUsed: Date; }[];
 };
+
+export async function trimSessions(userId: string, preserveToken?: string) {
+	const sessions = await db(manager, 'session', 'findMany', {
+		where: { userId, expiresAt: { gt: new Date() } },
+		select: { dbId: true, token: true, lastUsed: true, device: true },
+		orderBy: { lastUsed: 'asc' },
+	});
+
+	const sessionsToRemove = Math.max(0, sessions.length - config.maxActiveSessions);
+	if (!sessionsToRemove) return;
+
+	const removableSessions = sessions.filter((session) => (
+		session.token !== preserveToken && session.device !== Device.Mobile && session.device !== Device.Tablet
+	));
+
+	const dbIds = removableSessions.slice(0, sessionsToRemove).map((session) => session.dbId);
+	if (dbIds.length) await db(manager, 'session', 'deleteMany', { where: { dbId: { in: dbIds } } });
+}
 
 export async function createOrLinkUser({ platform, email, displayName, avatarUrl, currentUserId, refreshProfile }: SessionInput): Promise<SessionOutput | null> {
 	const encryptedEmail = securityUtils.encrypt(email);
@@ -332,3 +326,26 @@ async function unlinkLoginMethod(userId: string, data: UnlinkLoginMethodInput): 
 	await db(manager, 'loginMethod', 'delete', { where: { dbId: target.dbId } });
 	return await db(manager, 'user', 'findUnique', { where: { userId }, ...DBUserSelectArgs });
 }
+
+// Schemas.
+export type SessionInput = z.infer<typeof sessionSchema>;
+export const sessionSchema = z.object({
+	platform: z.enum(Platforms),
+	email: z.email(),
+	displayName: z.string(),
+	avatarUrl: z.url().optional().nullable(),
+	currentUserId: z.string().optional(),
+	refreshProfile: z.boolean().optional(),
+	device: z.enum(Device).optional(),
+	ip: z.string().optional(),
+});
+
+export type SessionDeleteInput = z.infer<typeof sessionDeleteSchema>;
+export const sessionDeleteSchema = z.object({
+	dbId: z.string(),
+});
+
+export type UnlinkLoginMethodInput = z.infer<typeof unlinkLoginMethodSchema>;
+export const unlinkLoginMethodSchema = z.object({
+	platform: z.enum(Platforms),
+});

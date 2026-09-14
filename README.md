@@ -40,6 +40,7 @@ DEVELOPERS="admin@example.com"       # Comma-separated admin user emails
 # Server settings
 PORT=3004
 DATABASE_URL="your-database-url"
+MAX_ACTIVE_SESSIONS=10
 
 # Database connection pooling
 DB_POOL_MIN=2

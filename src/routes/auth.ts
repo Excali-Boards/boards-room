@@ -1,5 +1,5 @@
 import { parseZodError, securityUtils } from '../modules/functions.js';
-import { createOrLinkUser, sessionSchema } from './sessions.js';
+import { createOrLinkUser, sessionSchema, trimSessions } from './sessions.js';
 import { makeRoute, json } from '../services/routes.js';
 import config from '../core/config.js';
 import { db } from '../core/prisma.js';
@@ -30,16 +30,14 @@ export default [
 			await db(manager, 'session', 'create', {
 				data: {
 					token,
+					device: isValid.data.device,
 					locationEncrypted,
 					userId: DBUser.userId,
 					expiresAt,
 				},
 			});
 
-			if (DBUser.sessions && DBUser.sessions.length >= 5) {
-				const oldestSession = DBUser.sessions.sort((a, b) => a.lastUsed.getTime() - b.lastUsed.getTime())[0];
-				if (oldestSession) await db(manager, 'session', 'delete', { where: { dbId: oldestSession.dbId } });
-			}
+			await trimSessions(DBUser.userId, token);
 
 			return json(c, 200, {
 				data: {
