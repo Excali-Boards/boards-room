@@ -34,6 +34,51 @@ export const ResourceRank: Record<ResourceType, number> = {
 	board: 3,
 };
 
+const AccessLevelRank: Record<AccessLevel, number> = {
+	read: 1,
+	write: 2,
+	manage: 3,
+	admin: 4,
+};
+
+/**
+ * Returns the access level a role provides on a particular resource type.
+ * PermissionHierarchy is intentionally not used here: it describes who may
+ * grant which roles, not how inherited permissions compare on a resource.
+ */
+export function getRoleAccessLevel(resourceType: ResourceType, role: UserRole): AccessLevel | null {
+	switch (resourceType) {
+		case 'board': {
+			if (role === BoardRole.BoardViewer || role === CategoryRole.CategoryViewer || role === GroupRole.GroupViewer) return 'read';
+			if (role === BoardRole.BoardCollaborator || role === CategoryRole.CategoryCollaborator || role === GroupRole.GroupCollaborator) return 'write';
+			if (role === CategoryRole.CategoryManager || role === GroupRole.GroupManager) return 'manage';
+			if (role === CategoryRole.CategoryAdmin || role === GroupRole.GroupAdmin || role === GlobalRole.Developer) return 'admin';
+			break;
+		}
+		case 'category': {
+			if (role === CategoryRole.CategoryViewer || role === GroupRole.GroupViewer) return 'read';
+			if (role === CategoryRole.CategoryCollaborator || role === GroupRole.GroupCollaborator) return 'write';
+			if (role === CategoryRole.CategoryManager || role === GroupRole.GroupManager) return 'manage';
+			if (role === CategoryRole.CategoryAdmin || role === GroupRole.GroupAdmin || role === GlobalRole.Developer) return 'admin';
+			break;
+		}
+		case 'group': {
+			if (role === GroupRole.GroupViewer) return 'read';
+			if (role === GroupRole.GroupCollaborator) return 'write';
+			if (role === GroupRole.GroupManager) return 'manage';
+			if (role === GroupRole.GroupAdmin || role === GlobalRole.Developer) return 'admin';
+			break;
+		}
+	}
+
+	return null;
+}
+
+export function getResourceRoleRank(resourceType: ResourceType, role: UserRole): number {
+	const accessLevel = getRoleAccessLevel(resourceType, role);
+	return accessLevel ? AccessLevelRank[accessLevel] : 0;
+}
+
 export function isDeveloper(email: string): boolean {
 	if (developerCache.has(email)) return developerCache.get(email)!;
 
@@ -91,8 +136,65 @@ export function getUserHighestRole<A extends GlobalResourceType>(DBUser: DBUserP
 	return roles.reduce((highest, current) => PermissionHierarchy[current] > PermissionHierarchy[highest] ? current : highest) as ResourceReturnEnum<A>;
 }
 
+/**
+ * Selects the role that provides the most access on this resource. This is
+ * separate from getUserHighestRole because grant authority and resource
+ * access are different things: GroupViewer is higher in the grant hierarchy,
+ * but only read access on a board, while BoardCollaborator grants write access.
+ */
+export function getUserHighestAccessRole<A extends ResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>): ResourceReturnEnum<A> | null {
+	if (isDeveloper(DBUser.email)) return GlobalRole.Developer as ResourceReturnEnum<A>;
+
+	const roles: { role: UserRole; sourceType: ResourceType; }[] = [];
+
+	switch (resource.type) {
+		case 'board': {
+			const resourceIds = getBoardResourceId(resource as ResourceTypeGeneric<'board'>);
+			if (!resourceIds) break;
+
+			const boardPerm = DBUser.boardPermissions.find((permission) => permission.boardId === resourceIds.boardId);
+			if (boardPerm) roles.push({ role: boardPerm.role, sourceType: 'board' });
+
+			const categoryPerm = DBUser.categoryPermissions.find((permission) => permission.categoryId === resourceIds.categoryId);
+			if (categoryPerm) roles.push({ role: categoryPerm.role, sourceType: 'category' });
+
+			const groupPerm = DBUser.groupPermissions.find((permission) => permission.groupId === resourceIds.groupId);
+			if (groupPerm) roles.push({ role: groupPerm.role, sourceType: 'group' });
+			break;
+		}
+		case 'category': {
+			const resourceIds = getCategoryResourceId(resource as ResourceTypeGeneric<'category'>);
+			if (!resourceIds) break;
+
+			const categoryPerm = DBUser.categoryPermissions.find((permission) => permission.categoryId === resourceIds.categoryId);
+			if (categoryPerm) roles.push({ role: categoryPerm.role, sourceType: 'category' });
+
+			const groupPerm = DBUser.groupPermissions.find((permission) => permission.groupId === resourceIds.groupId);
+			if (groupPerm) roles.push({ role: groupPerm.role, sourceType: 'group' });
+			break;
+		}
+		case 'group': {
+			const resourceIds = getGroupResourceId(resource as ResourceTypeGeneric<'group'>);
+			const groupPerm = DBUser.groupPermissions.find((permission) => permission.groupId === resourceIds.groupId);
+			if (groupPerm) roles.push({ role: groupPerm.role, sourceType: 'group' });
+			break;
+		}
+	}
+
+	if (roles.length === 0) return null;
+
+	return roles.reduce((highest, current) => {
+		const currentRank = getResourceRoleRank(resource.type, current.role);
+		const highestRank = getResourceRoleRank(resource.type, highest.role);
+
+		if (currentRank > highestRank) return current;
+		if (currentRank === highestRank && ResourceRank[current.sourceType] > ResourceRank[highest.sourceType]) return current;
+		return highest;
+	}).role as ResourceReturnEnum<A>;
+}
+
 export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): AccessLevel | null {
-	const role = userHighestRole || getUserHighestRole(DBUser, resource);
+	const role = resource.type === 'global' ? userHighestRole || getUserHighestRole(DBUser, resource) : getUserHighestAccessRole(DBUser, resource as ResourceTypeGeneric<ResourceType>) || userHighestRole;
 	if (!role) {
 		if (resource.type === 'group') {
 			const hasAnyCategoryAccess = DBUser.categoryPermissions.length > 0;
@@ -108,54 +210,7 @@ export function getAccessLevel<A extends GlobalResourceType>(DBUser: DBUserParti
 		return null;
 	}
 
-	switch (resource.type) {
-		case 'board': {
-			if (role === BoardRole.BoardViewer) return 'read';
-			if (role === BoardRole.BoardCollaborator) return 'write';
-
-			if (role === CategoryRole.CategoryViewer) return 'read';
-			if (role === CategoryRole.CategoryCollaborator) return 'write';
-			if (role === CategoryRole.CategoryManager) return 'manage';
-			if (role === CategoryRole.CategoryAdmin) return 'admin';
-
-			if (role === GroupRole.GroupViewer) return 'read';
-			if (role === GroupRole.GroupCollaborator) return 'write';
-			if (role === GroupRole.GroupManager) return 'manage';
-			if (role === GroupRole.GroupAdmin) return 'admin';
-
-			if (role === GlobalRole.Developer) return 'admin';
-			break;
-		}
-		case 'category': {
-			if (role === CategoryRole.CategoryViewer) return 'read';
-			if (role === CategoryRole.CategoryCollaborator) return 'write';
-			if (role === CategoryRole.CategoryManager) return 'manage';
-			if (role === CategoryRole.CategoryAdmin) return 'admin';
-
-			if (role === GroupRole.GroupViewer) return 'read';
-			if (role === GroupRole.GroupCollaborator) return 'write';
-			if (role === GroupRole.GroupManager) return 'manage';
-			if (role === GroupRole.GroupAdmin) return 'admin';
-
-			if (role === GlobalRole.Developer) return 'admin';
-			break;
-		}
-		case 'group': {
-			if (role === GroupRole.GroupViewer) return 'read';
-			if (role === GroupRole.GroupCollaborator) return 'write';
-			if (role === GroupRole.GroupManager) return 'manage';
-			if (role === GroupRole.GroupAdmin) return 'admin';
-
-			if (role === GlobalRole.Developer) return 'admin';
-			break;
-		}
-		case 'global': {
-			if (role === GlobalRole.Developer) return 'admin';
-			break;
-		}
-	}
-
-	return null;
+	return resource.type === 'global' ? role === GlobalRole.Developer ? 'admin' : null : getRoleAccessLevel(resource.type, role);
 }
 
 export function canView<A extends GlobalResourceType>(DBUser: DBUserPartialType, resource: ResourceTypeGeneric<A>, userHighestRole?: UserRole): boolean {
@@ -270,81 +325,109 @@ export function generateInviteCode(): string {
 
 export async function processPermissionGrants(manager: BoardsManager, request: GrantPermissionsRequest): Promise<PermissionGrantResult> {
 	const { userId, groupIds, categoryIds, boardIds, groupRole, categoryRole, boardRole } = request;
+	const requestedGroupIds = groupIds || [];
+	const requestedCategoryIds = categoryIds || [];
+	const requestedBoardIds = boardIds || [];
 
 	const newPermissions: GrantedRoles = [];
 	const updatedPermissions: (GrantedRole & { dbId: string })[] = [];
 
-	const [existingGroupPerms, existingCategoryPerms, existingBoardPerms] = await Promise.all([
-		groupIds && groupIds.length > 0 && groupRole ? db(manager, 'groupPermission', 'findMany', { where: { userId, groupId: { in: groupIds } } }) : Promise.resolve([]),
-		categoryIds && categoryIds.length > 0 && categoryRole ? db(manager, 'categoryPermission', 'findMany', { where: { userId, categoryId: { in: categoryIds } } }) : Promise.resolve([]),
-		boardIds && boardIds.length > 0 && boardRole ? db(manager, 'boardPermission', 'findMany', { where: { userId, boardId: { in: boardIds } } }) : Promise.resolve([]),
+	const [categories, boards] = await Promise.all([
+		requestedCategoryIds.length ? db(manager, 'category', 'findMany', {
+			where: { categoryId: { in: requestedCategoryIds } },
+			select: { categoryId: true, groupId: true },
+		}) : Promise.resolve([]),
+		requestedBoardIds.length ? db(manager, 'board', 'findMany', {
+			where: { boardId: { in: requestedBoardIds } },
+			select: { boardId: true, categoryId: true, category: { select: { groupId: true } } },
+		}) : Promise.resolve([]),
 	]);
 
-	if (groupIds && groupIds.length > 0 && groupRole) {
-		const existingMap = new Map((existingGroupPerms || []).map((p) => [p.groupId, p]));
+	const categoryMap = new Map((categories || []).map((category) => [category.categoryId, category]));
+	const boardMap = new Map((boards || []).map((board) => [board.boardId, board]));
+	const relevantCategoryIds = Array.from(new Set([
+		...requestedCategoryIds,
+		...(boards || []).map((board) => board.categoryId),
+	]));
+	const relevantGroupIds = Array.from(new Set([
+		...requestedGroupIds,
+		...(categories || []).map((category) => category.groupId),
+		...(boards || []).map((board) => board.category.groupId),
+	]));
 
-		for (const groupId of groupIds) {
-			const existing = existingMap.get(groupId);
+	// Load direct permissions for the requested resources and inherited
+	// permissions for their parents. A child grant is only needed when it
+	// provides more access than the user already receives from its parents.
+	const [existingGroupPerms, existingCategoryPerms, existingBoardPerms] = await Promise.all([
+		relevantGroupIds.length ? db(manager, 'groupPermission', 'findMany', { where: { userId, groupId: { in: relevantGroupIds } } }) : Promise.resolve([]),
+		relevantCategoryIds.length ? db(manager, 'categoryPermission', 'findMany', { where: { userId, categoryId: { in: relevantCategoryIds } } }) : Promise.resolve([]),
+		requestedBoardIds.length ? db(manager, 'boardPermission', 'findMany', { where: { userId, boardId: { in: requestedBoardIds } } }) : Promise.resolve([]),
+	]);
+
+	const groupPermMap = new Map((existingGroupPerms || []).map((permission) => [permission.groupId, permission]));
+	const categoryPermMap = new Map((existingCategoryPerms || []).map((permission) => [permission.categoryId, permission]));
+	const boardPermMap = new Map((existingBoardPerms || []).map((permission) => [permission.boardId, permission]));
+
+	if (requestedGroupIds.length && groupRole) {
+		for (const groupId of requestedGroupIds) {
+			const existing = groupPermMap.get(groupId);
 
 			if (!existing) newPermissions.push({ type: 'group', resourceId: groupId, role: groupRole });
-			else {
-				const existingHierarchy = PermissionHierarchy[existing.role];
-				const newHierarchy = PermissionHierarchy[groupRole];
-
-				if (newHierarchy > existingHierarchy) {
-					updatedPermissions.push({
-						type: 'group',
-						resourceId: groupId,
-						role: groupRole,
-						dbId: existing.dbId,
-					});
-				}
+			else if (getResourceRoleRank('group', groupRole) > getResourceRoleRank('group', existing.role)) {
+				updatedPermissions.push({
+					type: 'group',
+					resourceId: groupId,
+					role: groupRole,
+					dbId: existing.dbId,
+				});
 			}
 		}
 	}
 
-	if (categoryIds && categoryIds.length > 0 && categoryRole) {
-		const existingMap = new Map((existingCategoryPerms || []).map((p) => [p.categoryId, p]));
+	if (requestedCategoryIds.length && categoryRole) {
+		for (const categoryId of requestedCategoryIds) {
+			const existing = categoryPermMap.get(categoryId);
+			const groupId = categoryMap.get(categoryId)?.groupId;
+			const inheritedGroupRole = groupId ? groupPermMap.get(groupId)?.role : undefined;
+			const inheritedRank = inheritedGroupRole ? getResourceRoleRank('category', inheritedGroupRole) : 0;
+			const requestedRank = getResourceRoleRank('category', categoryRole);
 
-		for (const categoryId of categoryIds) {
-			const existing = existingMap.get(categoryId);
+			if (requestedRank <= inheritedRank) continue;
 
 			if (!existing) newPermissions.push({ type: 'category', resourceId: categoryId, role: categoryRole });
-			else {
-				const existingHierarchy = PermissionHierarchy[existing.role];
-				const newHierarchy = PermissionHierarchy[categoryRole];
-
-				if (newHierarchy > existingHierarchy) {
-					updatedPermissions.push({
-						type: 'category',
-						resourceId: categoryId,
-						role: categoryRole,
-						dbId: existing.dbId,
-					});
-				}
+			else if (requestedRank > getResourceRoleRank('category', existing.role)) {
+				updatedPermissions.push({
+					type: 'category',
+					resourceId: categoryId,
+					role: categoryRole,
+					dbId: existing.dbId,
+				});
 			}
 		}
 	}
 
-	if (boardIds && boardIds.length > 0 && boardRole) {
-		const existingMap = new Map((existingBoardPerms || []).map((p) => [p.boardId, p]));
+	if (requestedBoardIds.length && boardRole) {
+		for (const boardId of requestedBoardIds) {
+			const existing = boardPermMap.get(boardId);
+			const board = boardMap.get(boardId);
+			const categoryRoleForBoard = board ? categoryPermMap.get(board.categoryId)?.role : undefined;
+			const groupRoleForBoard = board ? groupPermMap.get(board.category.groupId)?.role : undefined;
+			const inheritedRank = Math.max(
+				categoryRoleForBoard ? getResourceRoleRank('board', categoryRoleForBoard) : 0,
+				groupRoleForBoard ? getResourceRoleRank('board', groupRoleForBoard) : 0,
+			);
+			const requestedRank = getResourceRoleRank('board', boardRole);
 
-		for (const boardId of boardIds) {
-			const existing = existingMap.get(boardId);
+			if (requestedRank <= inheritedRank) continue;
 
 			if (!existing) newPermissions.push({ type: 'board', resourceId: boardId, role: boardRole });
-			else {
-				const existingHierarchy = PermissionHierarchy[existing.role];
-				const newHierarchy = PermissionHierarchy[boardRole];
-
-				if (newHierarchy > existingHierarchy) {
-					updatedPermissions.push({
-						type: 'board',
-						resourceId: boardId,
-						role: boardRole,
-						dbId: existing.dbId,
-					});
-				}
+			else if (requestedRank > getResourceRoleRank('board', existing.role)) {
+				updatedPermissions.push({
+					type: 'board',
+					resourceId: boardId,
+					role: boardRole,
+					dbId: existing.dbId,
+				});
 			}
 		}
 	}
@@ -354,6 +437,8 @@ export async function processPermissionGrants(manager: BoardsManager, request: G
 
 export async function applyPermissionGrants(manager: BoardsManager, result: PermissionGrantResult, grantedBy: string, userId: string): Promise<void> {
 	const { newPermissions, updatedPermissions } = result;
+	let deletedCategoryPermissions = false;
+	let deletedBoardPermissions = false;
 
 	await manager.prisma.$transaction(async (tx) => {
 		const groupPerms = newPermissions.filter((p) => p.type === 'group');
@@ -421,11 +506,61 @@ export async function applyPermissionGrants(manager: BoardsManager, result: Perm
 				}
 			}
 		}
+
+		// A parent grant can make an older child grant redundant. Normalize after
+		// applying all changes so this works regardless of grant order.
+		const [userGroupPerms, userCategoryPerms, userBoardPerms] = await Promise.all([
+			tx.groupPermission.findMany({
+				where: { userId },
+				select: { groupId: true, role: true },
+			}),
+			tx.categoryPermission.findMany({
+				where: { userId },
+				select: { dbId: true, categoryId: true, role: true, category: { select: { groupId: true } } },
+			}),
+			tx.boardPermission.findMany({
+				where: { userId },
+				select: { dbId: true, boardId: true, role: true, board: { select: { categoryId: true, category: { select: { groupId: true } } } } },
+			}),
+		]);
+
+		const groupRoleMap = new Map(userGroupPerms.map((permission) => [permission.groupId, permission.role]));
+		const categoryRoleMap = new Map(userCategoryPerms.map((permission) => [permission.categoryId, permission.role]));
+
+		const redundantCategoryDbIds = userCategoryPerms
+			.filter((permission) => {
+				const groupRole = groupRoleMap.get(permission.category.groupId);
+				return groupRole && getResourceRoleRank('category', groupRole) >= getResourceRoleRank('category', permission.role);
+			})
+			.map((permission) => permission.dbId);
+
+		const redundantBoardDbIds = userBoardPerms
+			.filter((permission) => {
+				const categoryRole = categoryRoleMap.get(permission.board.categoryId);
+				const groupRole = groupRoleMap.get(permission.board.category.groupId);
+				const inheritedRank = Math.max(
+					categoryRole ? getResourceRoleRank('board', categoryRole) : 0,
+					groupRole ? getResourceRoleRank('board', groupRole) : 0,
+				);
+
+				return inheritedRank >= getResourceRoleRank('board', permission.role);
+			})
+			.map((permission) => permission.dbId);
+
+		if (redundantCategoryDbIds.length > 0) {
+			await tx.categoryPermission.deleteMany({ where: { dbId: { in: redundantCategoryDbIds } } });
+			deletedCategoryPermissions = true;
+		}
+
+		if (redundantBoardDbIds.length > 0) {
+			await tx.boardPermission.deleteMany({ where: { dbId: { in: redundantBoardDbIds } } });
+			deletedBoardPermissions = true;
+		}
 	});
 
 	if (newPermissions.some((p) => p.type === 'group') || updatedPermissions.some((p) => p.type === 'group')) await invalidateCacheForWrite(manager, 'groupPermission');
-	if (newPermissions.some((p) => p.type === 'category') || updatedPermissions.some((p) => p.type === 'category')) await invalidateCacheForWrite(manager, 'categoryPermission');
-	if (newPermissions.some((p) => p.type === 'board') || updatedPermissions.some((p) => p.type === 'board')) await invalidateCacheForWrite(manager, 'boardPermission');
+	if (newPermissions.some((p) => p.type === 'category') || updatedPermissions.some((p) => p.type === 'category') || deletedCategoryPermissions) await invalidateCacheForWrite(manager, 'categoryPermission');
+	if (newPermissions.some((p) => p.type === 'board') || updatedPermissions.some((p) => p.type === 'board') || deletedBoardPermissions) await invalidateCacheForWrite(manager, 'boardPermission');
 
 	await invalidateCacheForWrite(manager, 'user');
 }

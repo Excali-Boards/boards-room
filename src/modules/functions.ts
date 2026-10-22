@@ -1,7 +1,7 @@
 import { GrantedEntry, HeaderGetter, ResourceId, ResourceTypeGeneric, RoomData } from '../types.js';
 import { encode as msgpackEncode, decode as msgpackDecode } from '@msgpack/msgpack';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
-import { PermissionHierarchy, ResourceRank } from '../other/permissions.js';
+import { getResourceRoleRank, ResourceRank } from '../other/permissions.js';
 import { BoardsManager } from '../index.js';
 import { BoardType } from '@prisma/client';
 import config from '../core/config.js';
@@ -258,19 +258,23 @@ export function addPermission(map: Map<string, GrantedEntry[]>, userId: string, 
 		return;
 	}
 
-	const curr = PermissionHierarchy[existing.role] ?? 0;
-	const next = PermissionHierarchy[entry.role] ?? 0;
+	const curr = getResourceRoleRank(entry.type, existing.role);
+	const next = getResourceRoleRank(entry.type, entry.role);
+	const entryGrantType = entry.basedOnType === entry.type ? 'explicit' : 'implicit';
 
-	existing.grantType = existing.grantType === 'explicit' ? 'explicit' : entry.basedOnType === entry.type ? 'explicit' : 'implicit';
-
-	if (next > curr) {
+	const replaceSource = () => {
 		existing.role = entry.role;
 		existing.basedOnType = entry.basedOnType;
 		existing.basedOnResourceId = entry.basedOnResourceId;
+		existing.basedOnResourceName = entry.basedOnResourceName;
+		existing.grantType = entryGrantType;
+	};
+
+	if (next > curr) {
+		replaceSource();
 	} else if (next === curr) {
 		if (ResourceRank[entry.basedOnType] > ResourceRank[existing.basedOnType]) {
-			existing.basedOnType = entry.basedOnType;
-			existing.basedOnResourceId = entry.basedOnResourceId;
+			replaceSource();
 		}
 	}
 }
