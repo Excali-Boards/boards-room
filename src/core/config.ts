@@ -111,7 +111,7 @@ if (!validatedConfig.success) throw new Error(JSON.stringify(parseZodError(valid
 export default validatedConfig.data;
 
 export type AllowedPlatforms = typeof allowedPlatforms[number];
-export const allowedPlatforms = ['google', 'github', 'microsoft', 'discord'] as const;
+export const allowedPlatforms = ['google', 'github', 'microsoft', 'discord', 'oidc'] as const;
 
 // Zod.
 export const nameObject = z.object({

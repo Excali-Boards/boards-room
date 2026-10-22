@@ -1,6 +1,6 @@
+import config, { allowedPlatforms } from '../core/config.js';
 import { parseZodError } from '../modules/functions.js';
 import { json, makeRoute } from '../services/routes.js';
-import config, { allowedPlatforms } from '../core/config.js';
 import { DBUserSelectArgs } from '../other/vars.js';
 import { Platforms, User } from '@prisma/client';
 import { db } from '../core/prisma.js';
@@ -135,9 +135,11 @@ export async function updateUserInfo(userId: string, data: Partial<UserInput>) {
 			updateData.email = platformInfo.platformEmail;
 			updateData.mainLoginType = data.platform;
 
-			await db(manager, 'loginMethod', 'deleteMany', {
-				where: { userId, platform: data.platform },
-			});
+			if (data.platform !== 'OIDC') {
+				await db(manager, 'loginMethod', 'deleteMany', {
+					where: { userId, platform: data.platform },
+				});
+			}
 
 			const previousMainPlatform = DBUser.mainLoginType;
 			const previousMainEmail = DBUser.email;
@@ -151,9 +153,11 @@ export async function updateUserInfo(userId: string, data: Partial<UserInput>) {
 				});
 			}
 		} else {
-			await db(manager, 'loginMethod', 'deleteMany', {
-				where: { userId, platform: data.platform },
-			});
+			if (data.platform !== 'OIDC') {
+				await db(manager, 'loginMethod', 'deleteMany', {
+					where: { userId, platform: data.platform },
+				});
+			}
 		}
 
 	}

@@ -154,19 +154,31 @@ export async function trimSessions(userId: string, preserveToken?: string) {
 	if (dbIds.length) await db(manager, 'session', 'deleteMany', { where: { dbId: { in: dbIds } } });
 }
 
-export async function createOrLinkUser({ platform, email, displayName, avatarUrl, currentUserId, refreshProfile }: SessionInput): Promise<SessionOutput | null> {
+export async function createOrLinkUser({ platform, email, displayName, avatarUrl, providerIssuer, providerSubject, currentUserId, refreshProfile }: SessionInput): Promise<SessionOutput | null> {
 	const encryptedEmail = securityUtils.encrypt(email);
 	const finalAvatarUrl = avatarUrl || `https://gravatar.com/avatar/${securityUtils.hash(email)}?d=mp`;
+
+	const hasProviderIdentity = Boolean(providerIssuer && providerSubject);
+	if (platform === Platforms.OIDC && !hasProviderIdentity) throw new Error('OIDC identity claims are missing.');
 
 	const userByEmail = await db(manager, 'user', 'findUnique', {
 		where: { email: encryptedEmail },
 		select: { userId: true, email: true, displayName: true, avatarUrl: true, mainLoginType: true, sessions: { select: { dbId: true, lastUsed: true } } },
 	});
 
-	const existingLoginMethod = await db(manager, 'loginMethod', 'findUnique', {
-		include: { user: { select: { userId: true, email: true, displayName: true, avatarUrl: true, mainLoginType: true, sessions: { select: { dbId: true, lastUsed: true } } } } },
-		where: { platform_platformEmail: { platform, platformEmail: encryptedEmail } },
-	});
+	const existingLoginMethod = hasProviderIdentity
+		? await db(manager, 'loginMethod', 'findUnique', {
+			include: { user: { select: { userId: true, email: true, displayName: true, avatarUrl: true, mainLoginType: true, sessions: { select: { dbId: true, lastUsed: true } } } } },
+			where: { platform_providerIssuer_providerSubject: { platform, providerIssuer: providerIssuer!, providerSubject: providerSubject! } },
+		})
+		: await db(manager, 'loginMethod', 'findUnique', {
+			include: { user: { select: { userId: true, email: true, displayName: true, avatarUrl: true, mainLoginType: true, sessions: { select: { dbId: true, lastUsed: true } } } } },
+			where: { platform_platformEmail: { platform, platformEmail: encryptedEmail } },
+		});
+
+	if (existingLoginMethod && userByEmail && existingLoginMethod.userId !== userByEmail.userId) {
+		throw new Error('This OIDC identity and email belong to different users.');
+	}
 
 	// Link to existing user
 	if (currentUserId) {
@@ -187,7 +199,7 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 				avatarUrl: true,
 				mainLoginType: true,
 				sessions: { select: { dbId: true, lastUsed: true } },
-				loginMethods: { select: { dbId: true, platform: true, platformEmail: true } },
+				loginMethods: { select: { dbId: true, platform: true, platformEmail: true, providerIssuer: true, providerSubject: true } },
 			},
 		});
 
@@ -205,15 +217,26 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 			await db(manager, 'loginMethod', 'deleteMany', {
 				where: { userId: currentUserId, platform },
 			});
+			if (hasProviderIdentity) {
+				await db(manager, 'loginMethod', 'create', {
+					data: { platform, platformEmail: encryptedEmail, providerIssuer, providerSubject, user: { connect: { userId: currentUserId } } },
+				});
+			}
 		} else {
 			const platformMethods = currentUser.loginMethods.filter((m) => m.platform === platform);
 			const primaryMethod = platformMethods[0];
 
 			if (primaryMethod) {
+				const providerData = hasProviderIdentity ? { providerIssuer, providerSubject } : {};
 				if (primaryMethod.platformEmail !== encryptedEmail) {
 					await db(manager, 'loginMethod', 'update', {
 						where: { dbId: primaryMethod.dbId },
-						data: { platformEmail: encryptedEmail },
+						data: { platformEmail: encryptedEmail, ...providerData },
+					});
+				} else if (hasProviderIdentity && (primaryMethod.providerIssuer !== providerIssuer || primaryMethod.providerSubject !== providerSubject)) {
+					await db(manager, 'loginMethod', 'update', {
+						where: { dbId: primaryMethod.dbId },
+						data: providerData,
 					});
 				}
 
@@ -228,6 +251,7 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 					data: {
 						platform,
 						platformEmail: encryptedEmail,
+						...(hasProviderIdentity ? { providerIssuer, providerSubject } : {}),
 						user: { connect: { userId: currentUserId } },
 					},
 				});
@@ -244,7 +268,7 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 	}
 
 	// Login with main method
-	if (userByEmail && userByEmail.mainLoginType === platform) {
+	if (userByEmail && userByEmail.mainLoginType === platform && (!hasProviderIdentity || existingLoginMethod)) {
 		const updateData: Record<string, unknown> = { avatarUrl: finalAvatarUrl };
 		if (refreshProfile) updateData.displayName = displayName;
 
@@ -263,14 +287,16 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 
 	// Login with linked method
 	if (existingLoginMethod) {
-		if (existingLoginMethod.platformEmail !== encryptedEmail) {
+		const providerData = hasProviderIdentity ? { providerIssuer, providerSubject } : {};
+		if (existingLoginMethod.platformEmail !== encryptedEmail || hasProviderIdentity && (existingLoginMethod.providerIssuer !== providerIssuer || existingLoginMethod.providerSubject !== providerSubject)) {
 			await db(manager, 'loginMethod', 'update', {
 				where: { dbId: existingLoginMethod.dbId },
-				data: { platformEmail: encryptedEmail },
+				data: { platformEmail: encryptedEmail, ...providerData },
 			});
 		}
 
 		const updateData: Record<string, unknown> = { avatarUrl: finalAvatarUrl };
+		if (existingLoginMethod.user.mainLoginType === platform) updateData.email = encryptedEmail;
 		if (refreshProfile) updateData.displayName = displayName;
 
 		return await db(manager, 'user', 'update', {
@@ -287,6 +313,7 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 	}
 
 	if (userByEmail) throw new Error('This account is not linked to that platform. Link it first.');
+	if (platform === Platforms.OIDC) throw new Error('This OIDC identity is not linked to an existing account. Link OIDC from an existing session first.');
 
 	// Create new user
 	const user = await db(manager, 'user', 'create', {
@@ -307,6 +334,11 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 	});
 
 	if (!user) throw new Error('Failed to create or update user.');
+	if (hasProviderIdentity) {
+		await db(manager, 'loginMethod', 'create', {
+			data: { platform, platformEmail: encryptedEmail, providerIssuer, providerSubject, user: { connect: { userId: user.userId } } },
+		});
+	}
 	return user;
 }
 
@@ -334,6 +366,8 @@ export const sessionSchema = z.object({
 	email: z.email(),
 	displayName: z.string(),
 	avatarUrl: z.url().optional().nullable(),
+	providerIssuer: z.url().optional(),
+	providerSubject: z.string().min(1).optional(),
 	currentUserId: z.string().optional(),
 	refreshProfile: z.boolean().optional(),
 	device: z.enum(Device).optional(),
