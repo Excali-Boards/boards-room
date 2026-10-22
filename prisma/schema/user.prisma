@@ -21,11 +21,11 @@ model User {
 
   flashcardProgress DeckProgress[]
 
-  sessions          Session[]
-  createdEvents     Event[]
-  createdInvites    Invite[]
-  boardActivities   UserBoardActivity[]
-  personalWorkspace PersonalWorkspace?
+  sessions        Session[]
+  createdEvents   Event[]
+  createdInvites  Invite[]
+  boardActivities UserBoardActivity[]
+  personalGroup   Group?              @relation("PersonalGroupOwner")
 }
 
 model Session {

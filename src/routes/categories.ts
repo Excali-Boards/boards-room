@@ -15,8 +15,8 @@ export default [
 
 		handler: async (c) => {
 			const groupId = c.req.param('groupId');
-			const personalGroup = await manager.prisma.group.findUnique({ where: { groupId }, select: { personalWorkspace: { select: { dbId: true } } } });
-			if (personalGroup?.personalWorkspace) return json(c, 400, { error: 'Use the personal category endpoint for personal workspaces.' });
+			const personalGroup = await manager.prisma.group.findUnique({ where: { groupId }, select: { kind: true } });
+			if (personalGroup?.kind === 'Personal') return json(c, 400, { error: 'Use the personal category endpoint for personal workspaces.' });
 
 			const createCategorySchema = nameObject.extend({
 				copyPermissionsFromCategoryId: z.string().optional(),

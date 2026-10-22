@@ -256,9 +256,9 @@ export default [
 			if (!DBBoard) return json(c, 404, { error: 'Board not found.' });
 			if (!canManageBoardWithIds(c.var.DBUser, boardId, categoryId, groupId)) return json(c, 403, { error: 'You do not have permission to move this board.' });
 
-			const DBTargetCategory = await db(manager, 'category', 'findUnique', { where: { categoryId: isValid.data.targetCategoryId }, select: { categoryId: true, groupId: true, group: { select: { personalWorkspace: { select: { dbId: true } } } } } });
+			const DBTargetCategory = await db(manager, 'category', 'findUnique', { where: { categoryId: isValid.data.targetCategoryId }, select: { categoryId: true, groupId: true, group: { select: { kind: true } } } });
 			if (!DBTargetCategory) return json(c, 404, { error: 'Target category not found.' });
-			if (DBTargetCategory.group.personalWorkspace) return json(c, 403, { error: 'Boards cannot be moved into personal boards.' });
+			if (DBTargetCategory.group.kind === 'Personal') return json(c, 403, { error: 'Boards cannot be moved into personal boards.' });
 			if (!canManage(c.var.DBUser, { type: 'category', data: { categoryId: DBTargetCategory.categoryId, groupId: DBTargetCategory.groupId } })) return json(c, 403, { error: 'You do not have permission to move boards into this category.' });
 
 			if (DBBoard.categoryId === DBTargetCategory.categoryId) return json(c, 400, { error: 'Source and target category cannot be the same.' });
@@ -299,8 +299,6 @@ export default [
 					select: { boardId: true, categoryId: true, index: true },
 				});
 			});
-			await manager.prisma.personalBoard.deleteMany({ where: { boardId } });
-
 			await Promise.all([
 				invalidateCacheForWrite(manager, 'board'),
 				invalidateCacheForWrite(manager, 'category'),

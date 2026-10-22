@@ -48,10 +48,10 @@ export default [
 
 			const category = await manager.prisma.category.findUnique({
 				where: { categoryId: input.data.categoryId },
-				select: { categoryId: true, groupId: true, group: { select: { personalWorkspace: { select: { dbId: true } } } } },
+				select: { categoryId: true, groupId: true, group: { select: { kind: true } } },
 			});
 			if (!category) return json(c, 404, { error: 'Category not found.' });
-			if (category.group.personalWorkspace) return json(c, 400, { error: 'Boards cannot be linked to a personal category.' });
+			if (category.group.kind === 'Personal') return json(c, 400, { error: 'Boards cannot be linked to a personal category.' });
 
 			const existingBoard = await manager.prisma.board.findUnique({ where: { boardId }, select: { boardId: true } });
 			const maxIndex = await manager.prisma.board.aggregate({ where: { categoryId: category.categoryId }, _max: { index: true } });
@@ -85,7 +85,7 @@ export default [
 							categoryId: true,
 							name: true,
 							groupId: true,
-							group: { select: { groupId: true, name: true, personalWorkspace: { select: { userId: true } } } },
+							group: { select: { groupId: true, name: true, kind: true, ownerId: true } },
 						},
 					},
 				},
@@ -107,8 +107,8 @@ export default [
 							groupName: board.category.group.name,
 							categoryId: board.category.categoryId,
 							categoryName: board.category.name,
-							isPersonal: board.category.group.personalWorkspace !== null,
-							userId: board.category.group.personalWorkspace?.userId || null,
+							isPersonal: board.category.group.kind === 'Personal',
+							userId: board.category.group.ownerId,
 						},
 					};
 				}),

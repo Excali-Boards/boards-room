@@ -15,9 +15,9 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			const DBGroups = await db(manager, 'group', 'findMany', {
-				where: c.var.isDev ? { personalWorkspace: null } : {
-					AND: [{ personalWorkspace: null }, { OR: [
+			const DBGroups = await manager.prisma.group.findMany({
+				where: c.var.isDev ? { kind: 'Shared' } : {
+					AND: [{ kind: 'Shared' }, { OR: [
 						{ groupId: { in: c.var.DBUser.groupPermissions.map((g) => g.groupId) || [] } },
 						{ categories: { some: { categoryId: { in: c.var.DBUser.categoryPermissions.map((ca) => ca.categoryId) || [] } } } },
 						{ categories: { some: { boards: { some: { boardId: { in: c.var.DBUser.boardPermissions.map((b) => b.boardId) || [] } } } } } },
@@ -53,7 +53,7 @@ export default [
 						},
 					},
 				},
-			}) || [];
+			});
 
 			return json(c, 200, {
 				data: DBGroups.sort((a, b) => a.index - b.index).map((g) => ({
@@ -93,13 +93,14 @@ export default [
 				if (!sourceGroup) return json(c, 400, { error: 'Source group for permission copy not found.' });
 			}
 
-			const totalGroups = await db(manager, 'group', 'findMany', { where: { personalWorkspace: null }, select: { index: true } }) || [];
+			const totalGroups = await db(manager, 'group', 'findMany', { where: { kind: 'Shared' }, select: { index: true } }) || [];
 			const newGroupId = securityUtils.randomString(12);
 			const newGroup = await db(manager, 'group', 'create', {
 				select: { groupId: true },
 				data: {
 					name: isValid.data.name,
 					groupId: newGroupId,
+					kind: 'Shared',
 					categories: { create: [] },
 					index: (totalGroups && totalGroups.length > 0 ? Math.max(...totalGroups.map((g) => g.index)) + 1 : 0),
 				},
@@ -141,7 +142,7 @@ export default [
 			const canReorderGroups = canManage(c.var.DBUser, { type: 'global', data: null });
 			if (!canReorderGroups) return json(c, 403, { error: 'You do not have permission to reorder groups.' });
 
-			const DBGroups = await db(manager, 'group', 'findMany', { where: { groupId: { in: isValid.data }, personalWorkspace: null } }) || [];
+			const DBGroups = await db(manager, 'group', 'findMany', { where: { groupId: { in: isValid.data }, kind: 'Shared' } }) || [];
 			if (DBGroups.length !== isValid.data.length) return json(c, 400, { error: 'Some groups do not exist.' });
 
 			const updatePromises = isValid.data.map((groupId, index) =>

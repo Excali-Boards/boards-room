@@ -13,9 +13,9 @@ export default [
 
 		handler: async (c) => {
 			const DBGroups = await manager.prisma.group.findMany({
-				where: c.var.isDev ? { personalWorkspace: null } : {
+				where: c.var.isDev ? { kind: 'Shared' } : {
 					AND: [{
-						personalWorkspace: null,
+						kind: 'Shared',
 					}, {
 						OR: [
 							{ groupId: { in: c.var.DBUser.groupPermissions.map((g) => g.groupId) || [] } },
@@ -112,12 +112,14 @@ export default [
 		path: '/all/personal',
 		method: 'GET',
 		enabled: true,
+		devOnly: true,
 		auth: true,
 
 		handler: async (c) => {
-			if (!c.var.isDev) return json(c, 403, { error: 'Only developers can view all personal boards.' });
-
-			const workspaces = await manager.prisma.personalWorkspace.findMany(PersonalWorkspaceArgs);
+			const workspaces = await manager.prisma.group.findMany({
+				where: { kind: 'Personal' },
+				...PersonalWorkspaceArgs,
+			});
 
 			return json(c, 200, {
 				data: workspaces.map(mapWorkspace),

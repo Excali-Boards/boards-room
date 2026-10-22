@@ -46,6 +46,11 @@ enum GroupRole {
   GroupAdmin
 }
 
+enum GroupKind {
+  Shared
+  Personal
+}
+
 model AllEnumsModel {
   dbId String @id @default(uuid())
 
