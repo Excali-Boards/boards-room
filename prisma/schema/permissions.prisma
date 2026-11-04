@@ -56,6 +56,7 @@ model Invite {
   dbId String @id @default(uuid())
 
   code String @unique
+  allowSignUp Boolean @default(false)
 
   groupIds  String[]
   groupRole GroupRole?

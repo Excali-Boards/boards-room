@@ -10,6 +10,7 @@ const config = {
 
 	apiToken: process.env.API_TOKEN!,
 	databaseUrl: process.env.DATABASE_URL!,
+	allowSignUp: process.env.ALLOW_SIGN_UP !== 'false',
 	personalBoardsEnabled: process.env.PERSONAL_BOARDS === 'true',
 	maxActiveSessions: process.env.MAX_ACTIVE_SESSIONS ? parseInt(process.env.MAX_ACTIVE_SESSIONS, 10) : 10,
 
@@ -60,6 +61,7 @@ const ConfigSchema = z.object({
 
 	apiToken: z.string(),
 	databaseUrl: z.string(),
+	allowSignUp: z.boolean(),
 	personalBoardsEnabled: z.boolean(),
 	maxActiveSessions: z.number().int().min(1).max(100),
 

@@ -52,6 +52,7 @@ export default [
 				expiresAt: invite.expiresAt,
 				maxUses: invite.maxUses,
 				currentUses: invite.currentUses,
+				allowSignUp: invite.allowSignUp,
 				boardRole: invite.boardRole,
 				categoryRole: invite.categoryRole,
 				groupRole: invite.groupRole,
@@ -84,7 +85,7 @@ export default [
 			const parsed = createInviteSchema.safeParse(await c.req.json().catch(() => ({})));
 			if (!parsed.success) return json(c, 400, { error: parseZodError(parsed.error) });
 
-			const { groupIds, categoryIds, boardIds, groupRole, categoryRole, boardRole, expiresIn, maxUses } = parsed.data;
+			const { groupIds, categoryIds, boardIds, groupRole, categoryRole, boardRole, expiresIn, maxUses, allowSignUp } = parsed.data;
 
 			let canManage = true;
 			let failedResource: { type: ResourceType; id: string } | null = null;
@@ -160,6 +161,7 @@ export default [
 				createdBy: c.var.DBUser.userId,
 				expiresAt,
 				maxUses: maxUses || 1,
+				allowSignUp,
 				groupIds: groupIds || [],
 				categoryIds: categoryIds || [],
 				boardIds: boardIds || [],
@@ -176,6 +178,7 @@ export default [
 					code: DBInvite.code,
 					expiresAt: DBInvite.expiresAt,
 					maxUses: DBInvite.maxUses,
+					allowSignUp: DBInvite.allowSignUp,
 				},
 			});
 		},
@@ -198,6 +201,7 @@ export default [
 					maxUses: DBInvite.maxUses,
 					expiresAt: DBInvite.expiresAt,
 					currentUses: DBInvite.currentUses,
+					allowSignUp: DBInvite.allowSignUp,
 					invitedBy: {
 						userId: DBInvite.creator.userId,
 						displayName: DBInvite.creator.displayName,
@@ -349,6 +353,7 @@ export default [
 					expiresAt: updated.expiresAt,
 					maxUses: updated.maxUses,
 					currentUses: updated.currentUses,
+					allowSignUp: updated.allowSignUp,
 				},
 			});
 		},
@@ -455,6 +460,7 @@ export default [
 					expiresAt: invite.expiresAt,
 					maxUses: invite.maxUses,
 					currentUses: invite.currentUses,
+					allowSignUp: invite.allowSignUp,
 
 					boardRole: invite.boardRole,
 					categoryRole: invite.categoryRole,

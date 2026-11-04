@@ -154,7 +154,7 @@ export async function trimSessions(userId: string, preserveToken?: string) {
 	if (dbIds.length) await db(manager, 'session', 'deleteMany', { where: { dbId: { in: dbIds } } });
 }
 
-export async function createOrLinkUser({ platform, email, displayName, avatarUrl, providerIssuer, providerSubject, currentUserId, refreshProfile }: SessionInput): Promise<SessionOutput | null> {
+export async function createOrLinkUser({ platform, email, displayName, avatarUrl, providerIssuer, providerSubject, currentUserId, refreshProfile, inviteCode }: SessionInput): Promise<SessionOutput | null> {
 	const encryptedEmail = securityUtils.encrypt(email);
 	const finalAvatarUrl = avatarUrl || `https://gravatar.com/avatar/${securityUtils.hash(email)}?d=mp`;
 
@@ -314,6 +314,7 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 
 	if (userByEmail) throw new Error('This account is not linked to that platform. Link it first.');
 	if (platform === Platforms.OIDC) throw new Error('This OIDC identity is not linked to an existing account. Link OIDC from an existing session first.');
+	if (!config.allowSignUp && !await hasSignUpInvite(inviteCode)) throw new Error('Sign up is currently disabled. Please use an invite link that allows sign up.');
 
 	// Create new user
 	const user = await db(manager, 'user', 'create', {
@@ -339,6 +340,7 @@ export async function createOrLinkUser({ platform, email, displayName, avatarUrl
 			data: { platform, platformEmail: encryptedEmail, providerIssuer, providerSubject, user: { connect: { userId: user.userId } } },
 		});
 	}
+
 	return user;
 }
 
@@ -370,9 +372,26 @@ export const sessionSchema = z.object({
 	providerSubject: z.string().min(1).optional(),
 	currentUserId: z.string().optional(),
 	refreshProfile: z.boolean().optional(),
+	inviteCode: z.string().min(1).max(100).optional(),
 	device: z.enum(Device).optional(),
 	ip: z.string().optional(),
 });
+
+async function hasSignUpInvite(code?: string): Promise<boolean> {
+	if (!code) return false;
+
+	const invite = await manager.prisma.invite.findUnique({
+		where: { code },
+		select: { allowSignUp: true, expiresAt: true, maxUses: true, currentUses: true },
+	});
+
+	return Boolean(
+		invite
+		&& invite.allowSignUp
+		&& invite.expiresAt > new Date()
+		&& invite.currentUses < invite.maxUses,
+	);
+}
 
 export type SessionDeleteInput = z.infer<typeof sessionDeleteSchema>;
 export const sessionDeleteSchema = z.object({

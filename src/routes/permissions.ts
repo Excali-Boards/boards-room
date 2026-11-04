@@ -372,6 +372,7 @@ export const createInviteSchema = z.object({
 
 	expiresIn: z.number().min(1).max(30).default(7),
 	maxUses: z.number().min(1).optional(),
+	allowSignUp: z.boolean().default(false),
 }).refine((data) => !!(data.groupIds || data.categoryIds || data.boardIds), {
 	message: 'At least one of groupIds, categoryIds, or boardIds must be provided.',
 }).refine((data) => {

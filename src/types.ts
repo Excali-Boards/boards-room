@@ -122,7 +122,7 @@ export type BareBoard = {
 	canEdit: boolean;
 };
 
-export type InviteData = Pick<PrismaInvite, 'code' | 'expiresAt' | 'maxUses' | 'currentUses' | 'boardRole' | 'categoryRole' | 'groupRole'> & {
+export type InviteData = Pick<PrismaInvite, 'code' | 'expiresAt' | 'maxUses' | 'currentUses' | 'allowSignUp' | 'boardRole' | 'categoryRole' | 'groupRole'> & {
 	groups: { groupId: string; name: string; }[];
 	categories: { categoryId: string; name: string; groupId: string; }[];
 	boards: { boardId: string; name: string; categoryId: string; }[];
