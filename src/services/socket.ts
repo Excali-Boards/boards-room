@@ -17,6 +17,15 @@ import config from '../core/config.js';
 import { Readable } from 'node:stream';
 import { db } from '../core/prisma.js';
 
+const isTldrawActivityMessage = (message: string): boolean => {
+	try {
+		const parsed = JSON.parse(message) as { type?: string };
+		return parsed.type === 'push';
+	} catch {
+		return false;
+	}
+};
+
 export default class SocketServer {
 	private honoServer: ServerType | null = null;
 	public connectionTimes = new Map<string, NodeJS.Timeout>();
@@ -66,10 +75,14 @@ export default class SocketServer {
 
 	private handleConnection(): void {
 		this.io.on('connection', async (socket) => {
+			let userSessionStarted = false;
 			try {
 				if (config.rateLimiting.enabled) {
 					const allowed = await this.enforceSocketRateLimit(socket);
-					if (!allowed) return socket.disconnect(true);
+					if (!allowed) {
+						socket.disconnect(true);
+						return;
+					}
 				}
 
 				const totalRooms = this.excalidrawSocket.roomData.size + this.tldrawSocket.roomData.size;
@@ -77,18 +90,40 @@ export default class SocketServer {
 
 				const token = socket.handshake.auth.token as string;
 				const targetRoom = socket.handshake.auth.room as string;
-				if (!token || !targetRoom) return socket.disconnect(true);
+				if (!token || !targetRoom) {
+					socket.disconnect(true);
+					return;
+				}
 
 				const DBUser = await db(this.manager, 'user', 'findFirst', { where: { sessions: { some: { token } } }, ...DBUserPartial });
-				if (!DBUser) return socket.disconnect(true);
+				if (!DBUser) {
+					socket.disconnect(true);
+					return;
+				}
 
 				const DBBoard = await db(this.manager, 'board', 'findUnique', { where: { boardId: targetRoom }, select: { files: true, boardId: true, version: true, type: true, category: { select: { groupId: true } }, categoryId: true } });
-				if (!DBBoard) return socket.disconnect(true);
+				if (!DBBoard) {
+					socket.disconnect(true);
+					return;
+				}
 
 				const access = hasAccessToBoardWithIds(DBUser, DBBoard.boardId, DBBoard.categoryId, DBBoard.category.groupId);
-				if (!access.hasAccess) return socket.disconnect(true);
+				if (!access.hasAccess) {
+					socket.disconnect(true);
+					return;
+				}
 
 				this.manager.prometheus.startUserSession(DBUser.userId, DBBoard.boardId, socket.id);
+				userSessionStarted = true;
+				const cleanupSession = () => {
+					clearTimeout(this.connectionTimes.get(socket.id));
+					this.connectionTimes.delete(socket.id);
+					void this.manager.prometheus.endUserSession(socket.id).catch((error) => {
+						this.manager.prometheus.recordError('socket_disconnect_cleanup_error', 'socket');
+						LoggerModule('Socket', `Failed to end user session for socket ${socket.id}: ${error}`, 'red');
+					});
+				};
+				socket.once('disconnect', cleanupSession);
 
 				const disconnectTimeout = setTimeout(() => {
 					socket.disconnect(true);
@@ -99,22 +134,24 @@ export default class SocketServer {
 
 				switch (DBBoard.type) {
 					case 'Excalidraw': {
-						return this.excalidrawSocket.setupSocket(socket, {
+						await this.excalidrawSocket.setupSocket(socket, {
 							boardId: DBBoard.boardId,
 							files: DBBoard.files.map((f) => f.fileId),
 							version: DBBoard.version || 0,
 							canEdit: access.canEdit,
 							boardType: 'Excalidraw',
 						}, DBUser);
+						return;
 					}
 					case 'Tldraw': {
-						return this.tldrawSocket.setupSocket(socket, {
+						await this.tldrawSocket.setupSocket(socket, {
 							boardId: DBBoard.boardId,
 							files: DBBoard.files.map((f) => f.fileId),
 							version: DBBoard.version || 0,
 							canEdit: access.canEdit,
 							boardType: 'Tldraw',
 						}, DBUser);
+						return;
 					}
 					default: {
 						LoggerModule('Socket', `Connection rejected: Unsupported board type: ${DBBoard.type}. Socket: ${socket.id}`, 'red');
@@ -123,9 +160,11 @@ export default class SocketServer {
 					}
 				}
 			} catch (error) {
+				if (userSessionStarted) await this.manager.prometheus.endUserSession(socket.id);
 				this.manager.prometheus.recordError('socket_connection_error', 'socket');
 				LoggerModule('Socket', `Connection setup failed for socket ${socket.id}: ${error}`, 'red');
 				socket.disconnect(true);
+				return;
 			}
 		});
 	}
@@ -347,6 +386,31 @@ export class ExcalidrawSocket {
 		socket.on('presenceUpdate', (data) => {
 			if (!data || (data.state !== 'active' && data.state !== 'idle' && data.state !== 'away')) return;
 			this.socket.manager.prometheus.updateUserPresence(socket.id, data.state);
+			socket.broadcast.to(DBBoard.boardId).emit('collaboratorPointerUpdate', {
+				state: data.state,
+				socketId: socket.id,
+				username: DBUser.displayName,
+			});
+		});
+
+		socket.on('presenceHeartbeat', () => {
+			if (this.socket.manager.prometheus.recordPresenceHeartbeat(socket.id)) {
+				socket.broadcast.to(DBBoard.boardId).emit('collaboratorPointerUpdate', {
+					state: 'active',
+					socketId: socket.id,
+					username: DBUser.displayName,
+				});
+			}
+		});
+
+		socket.on('presenceActivity', () => {
+			if (this.socket.manager.prometheus.recordUserAction(socket.id)) {
+				socket.broadcast.to(DBBoard.boardId).emit('collaboratorPointerUpdate', {
+					state: 'active',
+					socketId: socket.id,
+					username: DBUser.displayName,
+				});
+			}
 		});
 
 		socket.on('disconnect', async () => {
@@ -423,8 +487,19 @@ export class ExcalidrawSocket {
 		});
 
 		socket.on('collaboratorPointerUpdate', (data) => {
-			this.socket.manager.prometheus.recordUserAction(socket.id);
-			socket.broadcast.to(DBBoard.boardId).emit('collaboratorPointerUpdate', data);
+			const isPresenceOnlyUpdate = Boolean(
+				data?.state &&
+				!data.pointer &&
+				!data.button &&
+				!data.selectedElementIds,
+			);
+			let becameActive = false;
+			if (isPresenceOnlyUpdate && data.state && (data.state === 'active' || data.state === 'idle' || data.state === 'away')) {
+				this.socket.manager.prometheus.updateUserPresence(socket.id, data.state);
+			} else {
+				becameActive = this.socket.manager.prometheus.recordUserAction(socket.id);
+			}
+			socket.broadcast.to(DBBoard.boardId).emit('collaboratorPointerUpdate', becameActive ? { ...data, state: 'active' } : data);
 		});
 
 		socket.on('relayVisibleSceneBounds', (data) => {
@@ -631,7 +706,7 @@ export class TldrawSocket {
 		this.socket.recentlyActiveRooms.delete(DBBoard.boardId);
 
 		socket.on('tldraw', (message) => {
-			this.socket.manager.prometheus.recordUserAction(socket.id);
+			if (isTldrawActivityMessage(message)) this.socket.manager.prometheus.recordUserAction(socket.id);
 			roomData.room.handleSocketMessage(socket.id as SocketId, message);
 		});
 
@@ -652,6 +727,14 @@ export class TldrawSocket {
 		socket.on('presenceUpdate', (data) => {
 			if (!data || (data.state !== 'active' && data.state !== 'idle' && data.state !== 'away')) return;
 			this.socket.manager.prometheus.updateUserPresence(socket.id, data.state);
+		});
+
+		socket.on('presenceHeartbeat', () => {
+			this.socket.manager.prometheus.recordPresenceHeartbeat(socket.id);
+		});
+
+		socket.on('presenceActivity', () => {
+			this.socket.manager.prometheus.recordUserAction(socket.id);
 		});
 
 		socket.on('disconnect', async () => {

@@ -14,11 +14,21 @@ export type UserActivitySession = {
 	socketId: string;
 	joinedAt: number;
 	lastActivityAt: number;
+	lastPresenceSignalAt: number;
 	lastPersistedAt: number;
 	presenceState: PresenceState;
 	lastStateAt: number;
 	activeMsTotal: number;
 	activeMsSincePersist: number;
+	sessionCountPersisted: boolean;
+	endedAt?: number;
+};
+
+type PendingEndedSession = {
+	session: UserActivitySession;
+	totalDurationSeconds: number;
+	durationDeltaSeconds: number;
+	incrementSessionCount: boolean;
 };
 
 export class MetricsBase {
@@ -172,7 +182,11 @@ export class MetricsBase {
 
 export default class PrometheusMetrics extends MetricsBase {
 	private activeSessions = new Map<string, UserActivitySession>();
+	private pendingEndedSessions = new Map<string, PendingEndedSession>();
+	private endingSessions = new Set<string>();
+	private persistencePromise: Promise<void> | null = null;
 	private persistInterval: NodeJS.Timeout | null = null;
+	private presenceExpiryInterval: NodeJS.Timeout | null = null;
 	private systemMetricsInterval: NodeJS.Timeout | null = null;
 	private dbMetricsInterval: NodeJS.Timeout | null = null;
 	public systemStatusData: SystemStatus | null = null;
@@ -187,6 +201,7 @@ export default class PrometheusMetrics extends MetricsBase {
 		this.dbMetricsInterval = setInterval(() => this.getDatabaseMetrics(), monitoringConstants.databaseUpdateIntervalMs);
 
 		this.startActivityPersistence();
+		this.presenceExpiryInterval = setInterval(() => this.expireStalePresence(), monitoringConstants.presenceExpiryCheckIntervalMs);
 	}
 
 	private async getSystemMetrics(): Promise<void> {
@@ -321,32 +336,43 @@ export default class PrometheusMetrics extends MetricsBase {
 			socketId,
 			joinedAt: now,
 			lastActivityAt: now,
+			lastPresenceSignalAt: now,
 			lastPersistedAt: now,
-			presenceState: 'active',
+			presenceState: 'idle',
 			lastStateAt: now,
 			activeMsTotal: 0,
 			activeMsSincePersist: 0,
+			sessionCountPersisted: false,
 		});
 
-		const boardSessions = Array.from(this.activeSessions.values()).filter((s) => s.boardId === boardId).length;
-		this.userActiveSessions.set({ board_id: boardId }, boardSessions);
-
-		const boardCollaborators = new Set(Array.from(this.activeSessions.values()).filter((s) => s.boardId === boardId).map((s) => s.userId)).size;
-		this.boardCollaborators.set({ board_id: boardId }, boardCollaborators);
+		this.updateBoardSessionMetrics(boardId);
 	}
 
-	public recordUserAction(socketId: string): void {
-		this.updateUserPresence(socketId, 'active');
+	public recordUserAction(socketId: string): boolean {
+		return this.updateUserPresence(socketId, 'active');
 	}
 
-	public updateUserPresence(socketId: string, nextState: PresenceState): void {
+	public recordPresenceHeartbeat(socketId: string): boolean {
 		const session = this.activeSessions.get(socketId);
-		if (!session) return;
+		if (!session || session.endedAt) return false;
+
+		if (session.presenceState !== 'active') {
+			return this.updateUserPresence(socketId, 'active');
+		}
+
+		session.lastPresenceSignalAt = Date.now();
+		return false;
+	}
+
+	public updateUserPresence(socketId: string, nextState: PresenceState): boolean {
+		const session = this.activeSessions.get(socketId);
+		if (!session || session.endedAt) return false;
 
 		const now = Date.now();
+		session.lastPresenceSignalAt = now;
 		if (session.presenceState === nextState) {
 			if (nextState === 'active') session.lastActivityAt = now;
-			return;
+			return false;
 		}
 
 		if (session.presenceState === 'active') {
@@ -358,36 +384,85 @@ export default class PrometheusMetrics extends MetricsBase {
 		session.presenceState = nextState;
 		session.lastStateAt = now;
 		if (nextState === 'active') session.lastActivityAt = now;
+		this.updateBoardSessionMetrics(session.boardId);
+		return true;
+	}
+
+	private updateBoardSessionMetrics(boardId: string): void {
+		const boardSessions = Array.from(this.activeSessions.values()).filter((session) => session.boardId === boardId && !session.endedAt);
+		this.userActiveSessions.set({ board_id: boardId }, boardSessions.filter((session) => session.presenceState === 'active').length);
+
+		const boardCollaborators = new Set(boardSessions.map((session) => session.userId)).size;
+		this.boardCollaborators.set({ board_id: boardId }, boardCollaborators);
+	}
+
+	private expireStalePresence(): void {
+		const now = Date.now();
+		for (const session of this.activeSessions.values()) {
+			if (
+				session.presenceState === 'active' &&
+				!session.endedAt &&
+				now - session.lastPresenceSignalAt >= monitoringConstants.presenceExpiryTimeoutMs
+			) {
+				this.updateUserPresence(session.socketId, 'idle');
+			}
+		}
 	}
 
 	public async endUserSession(socketId: string): Promise<void> {
 		const session = this.activeSessions.get(socketId);
-		if (!session) return;
+		if (!session || session.endedAt || this.endingSessions.has(socketId)) return;
 
-		const now = Date.now();
-		if (session.presenceState === 'active') {
-			const activeDelta = now - session.lastStateAt;
-			session.activeMsTotal += activeDelta;
-			session.activeMsSincePersist += activeDelta;
-			session.lastStateAt = now;
+		this.endingSessions.add(socketId);
+		try {
+			await this.persistActiveSessions();
+
+			const currentSession = this.activeSessions.get(socketId);
+			if (!currentSession || currentSession.endedAt) return;
+
+			const now = Date.now();
+			if (currentSession.presenceState === 'active') {
+				const activeDelta = now - currentSession.lastStateAt;
+				currentSession.activeMsTotal += activeDelta;
+				currentSession.activeMsSincePersist += activeDelta;
+				currentSession.lastStateAt = now;
+			}
+
+			currentSession.endedAt = now;
+			const durationSeconds = Math.floor(currentSession.activeMsTotal / 1000);
+			const durationDeltaSeconds = Math.floor(currentSession.activeMsSincePersist / 1000);
+			const incrementSessionCount = !currentSession.sessionCountPersisted;
+
+			this.userSessionDuration.observe({ user_id: currentSession.userId, board_id: currentSession.boardId }, durationSeconds);
+
+			const persisted = await this.persistSessionToDb(currentSession, durationSeconds, durationDeltaSeconds, incrementSessionCount);
+			if (persisted) {
+				this.activeSessions.delete(socketId);
+			} else {
+				currentSession.presenceState = 'away';
+				currentSession.lastStateAt = now;
+				currentSession.lastPresenceSignalAt = now;
+				this.pendingEndedSessions.set(socketId, {
+					session: currentSession,
+					totalDurationSeconds: durationSeconds,
+					durationDeltaSeconds,
+					incrementSessionCount,
+				});
+			}
+
+			this.updateBoardSessionMetrics(currentSession.boardId);
+		} finally {
+			this.endingSessions.delete(socketId);
 		}
-
-		const durationSeconds = Math.floor(session.activeMsTotal / 1000);
-		const durationDeltaSeconds = Math.floor(session.activeMsSincePersist / 1000);
-
-		this.userSessionDuration.observe({ user_id: session.userId, board_id: session.boardId }, durationSeconds);
-
-		const remainingBoardSessions = Array.from(this.activeSessions.values()).filter((s) => s.boardId === session.boardId && s.socketId !== socketId).length;
-		this.userActiveSessions.set({ board_id: session.boardId }, remainingBoardSessions);
-
-		const remainingCollaborators = new Set(Array.from(this.activeSessions.values()).filter((s) => s.boardId === session.boardId && s.socketId !== socketId).map((s) => s.userId)).size;
-		this.boardCollaborators.set({ board_id: session.boardId }, remainingCollaborators);
-
-		await this.persistSessionToDb(session, durationSeconds, durationDeltaSeconds);
-		this.activeSessions.delete(socketId);
 	}
 
-	private async persistSessionToDb(session: UserActivitySession, totalDurationSeconds: number, durationDeltaSeconds: number): Promise<void> {
+	private async persistSessionToDb(
+		session: UserActivitySession,
+		totalDurationSeconds: number,
+		durationDeltaSeconds: number,
+		incrementSessionCount: boolean,
+	): Promise<boolean> {
+		const lastActivityAt = new Date(Math.max(session.lastActivityAt, session.joinedAt));
 		try {
 			await db(this.manager, 'userBoardActivity', 'upsert', {
 				where: {
@@ -401,86 +476,119 @@ export default class PrometheusMetrics extends MetricsBase {
 					boardId: session.boardId,
 					totalSessions: 1,
 					totalActiveSeconds: totalDurationSeconds,
-					lastActivityAt: new Date(session.lastActivityAt),
+					lastActivityAt,
 				},
 				update: {
-					totalSessions: { increment: 1 },
+					...(incrementSessionCount ? { totalSessions: { increment: 1 } } : {}),
 					totalActiveSeconds: { increment: durationDeltaSeconds },
-					lastActivityAt: new Date(session.lastActivityAt),
 				},
 			});
 		} catch (error) {
 			this.recordError('activity_persistence', 'metrics');
 			LoggerModule('Metrics', `Error persisting user activity: ${error}`, 'red');
+			return false;
 		}
+
+		try {
+			await db(this.manager, 'userBoardActivity', 'updateMany', {
+				where: {
+					userId: session.userId,
+					boardId: session.boardId,
+					lastActivityAt: { lt: lastActivityAt },
+				},
+				data: { lastActivityAt },
+			});
+		} catch (error) {
+			// The activity counters are already durable. A stale last-activity label is
+			// preferable to retrying the increment and double-counting the session.
+			this.recordError('activity_timestamp_persistence', 'metrics');
+			LoggerModule('Metrics', `Error persisting last activity timestamp: ${error}`, 'red');
+		}
+
+		return true;
 	}
 
 	private startActivityPersistence(): void {
-		this.persistInterval = setInterval(() => { this.persistActiveSessions(); }, 60 * 1000);
+		this.persistInterval = setInterval(() => { void this.persistActiveSessions(); }, 60 * 1000);
 		LoggerModule('Metrics', 'Activity persistence started.', 'green');
 	}
 
 	private async persistActiveSessions(): Promise<void> {
-		const sessions = Array.from(this.activeSessions.values());
-		if (!sessions.length) return;
+		if (this.persistencePromise) return this.persistencePromise;
 
+		const persistencePromise = this.flushActivityToDb();
+		this.persistencePromise = persistencePromise;
+		try {
+			await persistencePromise;
+		} finally {
+			if (this.persistencePromise === persistencePromise) this.persistencePromise = null;
+		}
+	}
+
+	private async flushActivityToDb(): Promise<void> {
+		const sessions = Array.from(this.activeSessions.values()).filter((session) => !session.endedAt);
 		for (const session of sessions) {
-			try {
-				const now = Date.now();
-				if (session.presenceState === 'active') {
-					const activeDelta = now - session.lastStateAt;
-					session.activeMsTotal += activeDelta;
-					session.activeMsSincePersist += activeDelta;
-					session.lastStateAt = now;
-				}
-
-				const durationDeltaSeconds = Math.floor(session.activeMsSincePersist / 1000);
-
-				session.lastPersistedAt = now;
-				session.activeMsSincePersist = 0;
-
-				if (durationDeltaSeconds <= 0) continue;
-
-				await db(this.manager, 'userBoardActivity', 'upsert', {
-					where: {
-						userId_boardId: {
-							userId: session.userId,
-							boardId: session.boardId,
-						},
-					},
-					create: {
-						userId: session.userId,
-						boardId: session.boardId,
-						totalSessions: 0,
-						totalActiveSeconds: durationDeltaSeconds,
-						lastActivityAt: new Date(session.lastActivityAt),
-					},
-					update: {
-						totalActiveSeconds: { increment: durationDeltaSeconds },
-						lastActivityAt: new Date(session.lastActivityAt),
-					},
-				});
-			} catch (error) {
-				this.recordError('activity_persistence', 'metrics');
-				LoggerModule('Metrics', `Error persisting active session state: ${error}`, 'red');
+			const now = Date.now();
+			if (session.presenceState === 'active') {
+				const activeDelta = now - session.lastStateAt;
+				session.activeMsTotal += activeDelta;
+				session.activeMsSincePersist += activeDelta;
+				session.lastStateAt = now;
 			}
+
+			const durationDeltaSeconds = Math.floor(session.activeMsSincePersist / 1000);
+			if (durationDeltaSeconds <= 0) continue;
+
+			const persisted = await this.persistSessionToDb(
+				session,
+				durationDeltaSeconds,
+				durationDeltaSeconds,
+				!session.sessionCountPersisted,
+			);
+			if (!persisted) continue;
+
+			// Keep the sub-second remainder and only clear time after the write succeeds.
+			session.activeMsSincePersist = Math.max(0, session.activeMsSincePersist - durationDeltaSeconds * 1000);
+			session.lastPersistedAt = now;
+			session.sessionCountPersisted = true;
+		}
+
+		await this.flushPendingEndedSessions();
+	}
+
+	private async flushPendingEndedSessions(): Promise<void> {
+		for (const [socketId, pending] of this.pendingEndedSessions) {
+			const persisted = await this.persistSessionToDb(
+				pending.session,
+				pending.totalDurationSeconds,
+				pending.durationDeltaSeconds,
+				pending.incrementSessionCount,
+			);
+			if (!persisted) continue;
+
+			this.pendingEndedSessions.delete(socketId);
+			this.activeSessions.delete(socketId);
+			this.updateBoardSessionMetrics(pending.session.boardId);
 		}
 	}
 
 	public async shutdown(): Promise<void> {
 		if (this.persistInterval) clearInterval(this.persistInterval);
+		if (this.presenceExpiryInterval) clearInterval(this.presenceExpiryInterval);
 		if (this.systemMetricsInterval) clearInterval(this.systemMetricsInterval);
 		if (this.dbMetricsInterval) clearInterval(this.dbMetricsInterval);
 
 		await this.persistActiveSessions();
 
-		const sessions = Array.from(this.activeSessions.keys());
+		const sessions = Array.from(this.activeSessions.keys()).filter((socketId) => !this.pendingEndedSessions.has(socketId));
 		for (const socketId of sessions) await this.endUserSession(socketId);
+		await this.persistActiveSessions();
+		if (this.pendingEndedSessions.size) LoggerModule('Metrics', `${this.pendingEndedSessions.size} activity session write(s) still pending at shutdown.`, 'red');
 
 		LoggerModule('Metrics', 'Metrics system shutdown complete.', 'yellow');
 	}
 
 	public getActiveSessions(): UserActivitySession[] {
-		return Array.from(this.activeSessions.values());
+		return Array.from(this.activeSessions.values()).filter((session) => !session.endedAt);
 	}
 }

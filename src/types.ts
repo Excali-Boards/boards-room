@@ -330,6 +330,8 @@ export type ClientToServerEvents = {
 	relayVisibleSceneBounds: (data: BoundsData<'roomId'>) => unknown;
 
 	presenceUpdate: (data: PresenceUpdatePayload) => unknown;
+	presenceActivity: () => unknown;
+	presenceHeartbeat: () => unknown;
 };
 
 export type S3HealthStatus = {
