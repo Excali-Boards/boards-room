@@ -115,6 +115,7 @@ export type GrantedRole = {
 
 export type BareBoard = {
 	boardId: string;
+	name: string;
 	boardType: BoardType;
 
 	files: string[];
@@ -216,6 +217,7 @@ export type RoomData<T extends BoardType = BoardType> = {
 
 export type RoomDataExcalidraw = {
 	boardType: 'Excalidraw';
+	boardName: string;
 
 	files: string[];
 	elements: ExcalidrawElement[];
@@ -224,6 +226,7 @@ export type RoomDataExcalidraw = {
 
 export type RoomDataTldraw = {
 	boardType: 'Tldraw';
+	boardName: string;
 
 	room: TLSocketRoom;
 	files: string[];

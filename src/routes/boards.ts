@@ -61,6 +61,8 @@ export default [
 				return json(c, 500, { error: 'Failed to upload board file.' });
 			}
 
+			void manager.search.enqueueBoard(newBoard.boardId);
+
 			if (isValid.data.copyPermissionsFromBoardId) {
 				const sourcePerms = await db(manager, 'boardPermission', 'findMany', {
 					where: { boardId: isValid.data.copyPermissionsFromBoardId },
@@ -234,6 +236,8 @@ export default [
 
 			const updatedBoard = await db(manager, 'board', 'update', { where: { boardId, categoryId, category: { groupId } }, data: { name: isValid.data.name } });
 			if (!updatedBoard) return json(c, 500, { error: 'Failed to update board.' });
+
+			void manager.search.updateBoardName(boardId, updatedBoard.name);
 
 			return json(c, 200, { data: 'Successfully updated board.' });
 		},

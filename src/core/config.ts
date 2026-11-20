@@ -12,6 +12,7 @@ const config = {
 	databaseUrl: process.env.DATABASE_URL!,
 	allowSignUp: process.env.ALLOW_SIGN_UP !== 'false',
 	personalBoardsEnabled: process.env.PERSONAL_BOARDS === 'true',
+	globalSearchEnabled: process.env.GLOBAL_SEARCH === 'true',
 	maxActiveSessions: process.env.MAX_ACTIVE_SESSIONS ? parseInt(process.env.MAX_ACTIVE_SESSIONS, 10) : 10,
 
 	port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3004,
@@ -63,6 +64,7 @@ const ConfigSchema = z.object({
 	databaseUrl: z.string(),
 	allowSignUp: z.boolean(),
 	personalBoardsEnabled: z.boolean(),
+	globalSearchEnabled: z.boolean(),
 	maxActiveSessions: z.number().int().min(1).max(100),
 
 	port: z.number().int().min(1).max(65535),

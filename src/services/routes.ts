@@ -73,6 +73,14 @@ export default class Routes {
 			if (!route) return json(c, 404, { error: 'Route not found (#3).' });
 			else if (!route.enabled) return json(c, 404, { error: 'Route disabled.' });
 
+			if (!config.personalBoardsEnabled && routePath(c).startsWith('/groups/')) {
+				const groupId = c.req.param('groupId');
+				if (groupId) {
+					const group = await db(this.manager, 'group', 'findUnique', { where: { groupId }, select: { kind: true } });
+					if (group?.kind === 'Personal') return json(c, 404, { error: 'Personal boards are disabled.' });
+				}
+			}
+
 			return next();
 		};
 	}

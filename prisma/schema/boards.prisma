@@ -54,12 +54,47 @@ model Board {
 
   flashcardDeck FlashcardDeck?
 
+  searchIndex BoardSearchIndex?
+
   files           File[]
   boardPermission BoardPermission[]
   userActivities  UserBoardActivity[]
 
   @@index([categoryId])
   @@index([index])
+}
+
+model BoardSearchIndex {
+  dbId String @id @default(uuid())
+
+  boardId         String   @unique
+  boardName       String
+  indexedVersion  Int
+  bucketCount     Int
+  nameTokenHashes Int[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  board  Board @relation(fields: [boardId], references: [boardId], onDelete: Cascade)
+  chunks BoardSearchChunk[]
+
+  @@index([indexedVersion])
+  @@index([nameTokenHashes], type: Gin)
+}
+
+model BoardSearchChunk {
+  dbId              String   @id @default(uuid())
+  boardSearchIndexId String
+  chunkId           Int
+  tokenHashes       Int[]
+  payload           Bytes
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  boardSearchIndex BoardSearchIndex @relation(fields: [boardSearchIndexId], references: [dbId], onDelete: Cascade)
+
+  @@unique([boardSearchIndexId, chunkId])
+  @@index([tokenHashes], type: Gin)
 }
 
 model UserBoardActivity {

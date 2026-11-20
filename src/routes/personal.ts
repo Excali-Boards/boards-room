@@ -89,7 +89,7 @@ export default [
 
 		handler: async (c) => {
 			const userId = c.req.param('userId');
-			if (!config.personalBoardsEnabled && !c.var.isDev) return json(c, 404, { error: 'Personal boards are disabled.' });
+			if (!config.personalBoardsEnabled) return json(c, 404, { error: 'Personal boards are disabled.' });
 			if (!canAccessWorkspace(c.var.isDev, c.var.DBUser.userId, userId)) return json(c, 403, { error: 'You do not have access to this personal workspace.' });
 
 			const workspace = await ensurePersonalWorkspace(userId);
@@ -108,7 +108,7 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
-			if (!config.personalBoardsEnabled && !c.var.isDev) return json(c, 403, { error: 'You do not have permission to create personal categories.' });
+			if (!config.personalBoardsEnabled) return json(c, 403, { error: 'You do not have permission to create personal categories.' });
 
 			const isValid = nameObject.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
@@ -145,6 +145,7 @@ export default [
 		handler: async (c) => {
 			const userId = c.req.param('userId');
 			const categoryId = c.req.param('categoryId');
+			if (!config.personalBoardsEnabled) return json(c, 404, { error: 'Personal boards are disabled.' });
 			if (!canAccessWorkspace(c.var.isDev, c.var.DBUser.userId, userId)) return json(c, 403, { error: 'You do not have access to this personal workspace.' });
 
 			const category = await manager.prisma.category.findFirst({
@@ -188,7 +189,8 @@ export default [
 		handler: async (c) => {
 			const userId = c.req.param('userId');
 			const categoryId = c.req.param('categoryId');
-			if (!canAccessWorkspace(c.var.isDev, c.var.DBUser.userId, userId) || (!config.personalBoardsEnabled && !c.var.isDev)) return json(c, 403, { error: 'You do not have permission to create personal boards.' });
+			if (!config.personalBoardsEnabled) return json(c, 403, { error: 'You do not have permission to create personal boards.' });
+			if (!canAccessWorkspace(c.var.isDev, c.var.DBUser.userId, userId)) return json(c, 403, { error: 'You do not have permission to create personal boards.' });
 
 			const isValid = boardObject.safeParse(await c.req.json().catch(() => ({})));
 			if (!isValid.success) return json(c, 400, { error: parseZodError(isValid.error) });
@@ -230,6 +232,8 @@ export default [
 				return json(c, 500, { error: 'Failed to initialize personal board.' });
 			}
 
+			void manager.search.enqueueBoard(board.boardId);
+
 			return json(c, 200, {
 				data: {
 					groupId: category.groupId,
@@ -249,6 +253,7 @@ export default [
 			const userId = c.req.param('userId');
 			const categoryId = c.req.param('categoryId');
 			const boardId = c.req.param('boardId');
+			if (!config.personalBoardsEnabled) return json(c, 404, { error: 'Personal boards are disabled.' });
 			if (!canAccessWorkspace(c.var.isDev, c.var.DBUser.userId, userId)) return json(c, 403, { error: 'You do not have access to this personal workspace.' });
 
 			const board = await manager.prisma.board.findFirst({

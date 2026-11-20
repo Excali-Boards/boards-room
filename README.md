@@ -37,6 +37,7 @@ ALLOWED_ORIGINS="http://localhost:3002"
 API_TOKEN="your-api-token"           # Shared token with frontend
 DEVELOPERS="admin@example.com"       # Comma-separated admin user emails
 ALLOW_SIGN_UP=true                    # Set to false to require an invite for new accounts
+GLOBAL_SEARCH=false                   # Enable global text search across accessible boards
 
 # Server settings
 PORT=3004

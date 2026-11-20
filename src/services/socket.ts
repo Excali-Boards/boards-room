@@ -1,6 +1,7 @@
 import { ActionType, BareBoard, ClientToServerEvents, FileActionData, RecentlyActiveRoom, RoomData, ServerToClientEvents, SnapshotData } from '../types.js';
 import { getSceneVersion, hashElementsVersion, isInitializedImageElement, newElementWith, reconcileElements } from '../other/excalidraw.js';
 import { compressionUtils, resolveClientIp } from '../modules/functions.js';
+import { getExcalidrawSearchChanges, getTldrawSearchChanges } from './search.js';
 import { DBUserPartial, DBUserPartialType } from '../other/vars.js';
 import { hasAccessToBoardWithIds } from '../other/permissions.js';
 import { performanceConstants } from '../core/constants.js';
@@ -101,8 +102,12 @@ export default class SocketServer {
 					return;
 				}
 
-				const DBBoard = await db(this.manager, 'board', 'findUnique', { where: { boardId: targetRoom }, select: { files: true, boardId: true, version: true, type: true, category: { select: { groupId: true } }, categoryId: true } });
+				const DBBoard = await db(this.manager, 'board', 'findUnique', { where: { boardId: targetRoom }, select: { files: true, boardId: true, name: true, version: true, type: true, category: { select: { groupId: true, group: { select: { kind: true } } } }, categoryId: true } });
 				if (!DBBoard) {
+					socket.disconnect(true);
+					return;
+				}
+				if (!config.personalBoardsEnabled && DBBoard.category.group.kind === 'Personal') {
 					socket.disconnect(true);
 					return;
 				}
@@ -136,6 +141,7 @@ export default class SocketServer {
 					case 'Excalidraw': {
 						await this.excalidrawSocket.setupSocket(socket, {
 							boardId: DBBoard.boardId,
+							name: DBBoard.name,
 							files: DBBoard.files.map((f) => f.fileId),
 							version: DBBoard.version || 0,
 							canEdit: access.canEdit,
@@ -146,6 +152,7 @@ export default class SocketServer {
 					case 'Tldraw': {
 						await this.tldrawSocket.setupSocket(socket, {
 							boardId: DBBoard.boardId,
+							name: DBBoard.name,
 							files: DBBoard.files.map((f) => f.fileId),
 							version: DBBoard.version || 0,
 							canEdit: access.canEdit,
@@ -284,6 +291,8 @@ export class ExcalidrawSocket {
 
 		const currentVersion = getSceneVersion(roomData.elements);
 		const existingFile = await this.socket.manager.files.getBoardFile(boardId);
+		let previousElements: RoomData<'Excalidraw'>['elements'] | null = null;
+		let previousVersion: number | null = null;
 
 		if (existingFile) {
 			try {
@@ -291,6 +300,8 @@ export class ExcalidrawSocket {
 				const decompressed = compressionUtils.decompressAndDecrypt<RoomData<'Excalidraw'>['elements']>(body);
 
 				if (this.isSameScene(roomData.elements, decompressed)) return;
+				previousElements = decompressed;
+				previousVersion = getSceneVersion(decompressed);
 			} catch (error) {
 				this.socket.manager.prometheus.recordError('version_compare_error', 'socket');
 				LoggerModule('Socket', `Error comparing versions: ${error}`, 'red');
@@ -311,6 +322,27 @@ export class ExcalidrawSocket {
 				updatedAt: new Date(),
 			},
 		});
+
+		if (config.globalSearchEnabled && previousElements && previousVersion !== null) {
+			this.socket.manager.search.enqueueDelta({
+				boardId,
+				boardName: roomData.boardName,
+				boardType: 'Excalidraw',
+				previousVersion,
+				version: currentVersion,
+				changes: getExcalidrawSearchChanges(previousElements, roomData.elements),
+				data: roomData.elements,
+			});
+		} else if (config.globalSearchEnabled) {
+			this.socket.manager.search.enqueueFull({
+				boardId,
+				boardName: roomData.boardName,
+				boardType: 'Excalidraw',
+				version: currentVersion,
+				data: roomData.elements,
+			});
+		}
+
 	}
 
 	private async loadBoardElements(boardId: string): Promise<RoomData<'Excalidraw'>['elements']> {
@@ -334,7 +366,7 @@ export class ExcalidrawSocket {
 		const cached = this.roomData.get(room);
 		if (cached) return cached;
 
-		const DBBoard = await db(this.socket.manager, 'board', 'findUnique', { where: { boardId: room }, select: { files: true, boardId: true } });
+		const DBBoard = await db(this.socket.manager, 'board', 'findUnique', { where: { boardId: room }, select: { files: true, boardId: true, name: true } });
 		if (!DBBoard) return null;
 
 		try {
@@ -343,6 +375,7 @@ export class ExcalidrawSocket {
 				elements,
 				boardType: 'Excalidraw',
 				boardId: DBBoard.boardId,
+				boardName: DBBoard.name,
 				files: DBBoard.files.map((f) => f.fileId),
 				collaborators: new CustomMap(),
 			};
@@ -361,6 +394,7 @@ export class ExcalidrawSocket {
 			return {
 				elements,
 				boardId: DBBoard.boardId,
+				boardName: DBBoard.name,
 				files: DBBoard.files,
 				boardType: 'Excalidraw',
 				collaborators: new CustomMap(),
@@ -584,12 +618,14 @@ export class TldrawSocket {
 
 		const currentSnapshot = roomData.room.getCurrentSnapshot();
 		const existingFile = await this.socket.manager.files.getBoardFile(boardId);
+		let previousSnapshot: RoomSnapshot | null = null;
 
 		if (existingFile) {
 			try {
 				const body = await this.socket.manager.files.readableToBuffer(existingFile.Body as Readable);
 				const decompressed = compressionUtils.decompressAndDecrypt<RoomSnapshot>(body);
 				if (currentSnapshot.clock === decompressed.clock) return;
+				previousSnapshot = decompressed;
 
 			} catch (error) {
 				this.socket.manager.prometheus.recordError('version_compare_error', 'socket');
@@ -609,6 +645,27 @@ export class TldrawSocket {
 				updatedAt: new Date(),
 			},
 		});
+
+		if (config.globalSearchEnabled && previousSnapshot) {
+			this.socket.manager.search.enqueueDelta({
+				boardId,
+				boardName: roomData.boardName,
+				boardType: 'Tldraw',
+				previousVersion: typeof previousSnapshot.clock === 'number' ? previousSnapshot.clock : 0,
+				version: currentSnapshot.clock,
+				changes: getTldrawSearchChanges(previousSnapshot, currentSnapshot),
+				data: currentSnapshot,
+			});
+		} else if (config.globalSearchEnabled) {
+			this.socket.manager.search.enqueueFull({
+				boardId,
+				boardName: roomData.boardName,
+				boardType: 'Tldraw',
+				version: currentSnapshot.clock,
+				data: currentSnapshot,
+			});
+		}
+
 	}
 
 	private async loadBoardSnapshot(boardId: string): Promise<RoomSnapshot | null> {
@@ -635,7 +692,7 @@ export class TldrawSocket {
 		const cached = this.roomData.get(room);
 		if (cached) return cached;
 
-		const DBBoard = await db(this.socket.manager, 'board', 'findUnique', { where: { boardId: room }, select: { files: true, boardId: true } });
+		const DBBoard = await db(this.socket.manager, 'board', 'findUnique', { where: { boardId: room }, select: { files: true, boardId: true, name: true } });
 		if (!DBBoard) return null;
 
 		try {
@@ -644,6 +701,7 @@ export class TldrawSocket {
 			return {
 				boardType: 'Tldraw',
 				boardId: DBBoard.boardId,
+				boardName: DBBoard.name,
 				files: DBBoard.files.map((f) => f.fileId),
 				collaborators: new CustomMap(),
 				needsPersist: false,
@@ -674,6 +732,7 @@ export class TldrawSocket {
 
 			return {
 				boardId: DBBoard.boardId,
+				boardName: DBBoard.name,
 				files: DBBoard.files,
 				boardType: 'Tldraw',
 				collaborators: new CustomMap(),

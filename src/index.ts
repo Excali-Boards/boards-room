@@ -1,4 +1,5 @@
 import Utils, { buildDatabaseUrl } from './modules/utils.js';
+import { BoardSearchIndexer } from './services/search.js';
 import PrometheusMetrics from './modules/metrics.js';
 import SocketServer from './services/socket.js';
 import LoggerModule from './modules/logger.js';
@@ -22,6 +23,7 @@ export class BoardsManager {
 	});
 
 	public prometheus = new PrometheusMetrics(this);
+	public search = new BoardSearchIndexer(this);
 	public socket = new SocketServer(this);
 	public routes = new Routes(this);
 	public utils = new Utils(this);
@@ -34,6 +36,7 @@ export class BoardsManager {
 	public async init() {
 		await this.initPrisma();
 		await this.cache.init();
+		await this.search.init();
 
 		await this.routes.init();
 		await this.socket.init();
@@ -53,6 +56,7 @@ export default manager;
 
 export async function shutdown() {
 	await manager.socket.saveAllBoards();
+	await manager.search.shutdown();
 	await manager.prometheus.shutdown();
 	await manager.cache.disconnect();
 	await manager.prisma.$disconnect();

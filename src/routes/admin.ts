@@ -53,11 +53,14 @@ export default [
 			if (!category) return json(c, 404, { error: 'Category not found.' });
 			if (category.group.kind === 'Personal') return json(c, 400, { error: 'Boards cannot be linked to a personal category.' });
 
-			const existingBoard = await manager.prisma.board.findUnique({ where: { boardId }, select: { boardId: true } });
+			const existingBoard = await manager.prisma.board.findUnique({ where: { boardId }, select: { boardId: true, name: true, type: true } });
 			const maxIndex = await manager.prisma.board.aggregate({ where: { categoryId: category.categoryId }, _max: { index: true } });
 			const board = existingBoard
 				? await manager.prisma.board.update({ where: { boardId }, data: { name: input.data.name, type: input.data.type, categoryId: category.categoryId } })
 				: await manager.prisma.board.create({ data: { boardId, name: input.data.name, type: input.data.type, categoryId: category.categoryId, index: (maxIndex._max.index ?? -1) + 1 } });
+
+			if (!existingBoard || existingBoard.type !== board.type) void manager.search.enqueueBoard(board.boardId);
+			else if (existingBoard.name !== board.name) void manager.search.updateBoardName(board.boardId, board.name);
 
 			return json(c, 200, { data: { boardId: board.boardId, name: board.name, categoryId: category.categoryId } });
 		},

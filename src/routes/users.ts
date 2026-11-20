@@ -20,7 +20,8 @@ export default [
 				data: {
 					...c.var.DBUser,
 					isDev: c.var.isDev,
-					personalBoardsEnabled: config.personalBoardsEnabled || c.var.isDev,
+					personalBoardsEnabled: config.personalBoardsEnabled,
+					globalSearchEnabled: config.globalSearchEnabled,
 				},
 			});
 		},

@@ -2,6 +2,7 @@ import { getAccessLevel, getUserHighestRole } from '../other/permissions.js';
 import { PersonalWorkspaceArgs } from '../other/vars.js';
 import { json, makeRoute } from '../services/routes.js';
 import { mapWorkspace } from './personal.js';
+import config from '../core/config.js';
 import manager from '../index.js';
 
 export default [
@@ -116,6 +117,8 @@ export default [
 		auth: true,
 
 		handler: async (c) => {
+			if (!config.personalBoardsEnabled) return json(c, 404, { error: 'Personal boards are disabled.' });
+
 			const workspaces = await manager.prisma.group.findMany({
 				where: { kind: 'Personal' },
 				...PersonalWorkspaceArgs,
