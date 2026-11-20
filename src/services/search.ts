@@ -11,16 +11,13 @@ const SEARCH_INDEX_BATCH_SIZE = 10;
 const MAX_CHUNK_ITEMS = 512;
 const MAX_CHUNK_TEXT_CHARACTERS = 128_000;
 const MAX_SEARCHABLE_TEXT_LENGTH = 64_000;
-const MAX_STORED_TEXT_LENGTH = 4_096;
 const MAX_TOKENS_PER_ITEM = 2_048;
 const MAX_TOKEN_PREFIX_LENGTH = 32;
 const MAX_BUCKET_COUNT = 32_768;
 
 export type BoardSearchMatch = {
 	elementId: string;
-	kind: string;
 	text: string;
-	truncated: boolean;
 	x?: number;
 	y?: number;
 	pageId?: string;
@@ -150,7 +147,7 @@ const extractRichText = (value: unknown, output: string[] = []): string[] => {
 	return output;
 };
 
-const makeSearchItem = (elementId: string, kind: string, text: string, position?: { x?: number; y?: number; pageId?: string }): StoredSearchItem | null => {
+const makeSearchItem = (elementId: string, text: string, position?: { x?: number; y?: number; pageId?: string }): StoredSearchItem | null => {
 	const normalized = normalizeText(text);
 	if (!normalized) return null;
 
@@ -160,9 +157,7 @@ const makeSearchItem = (elementId: string, kind: string, text: string, position?
 
 	return {
 		elementId,
-		kind,
-		text: truncate(normalized, MAX_STORED_TEXT_LENGTH),
-		truncated: normalized.length > MAX_STORED_TEXT_LENGTH,
+		text: normalized,
 		tokenHashes,
 		...(position?.x === undefined ? {} : { x: position.x }),
 		...(position?.y === undefined ? {} : { y: position.y }),
@@ -174,7 +169,7 @@ const getExcalidrawSearchItem = (element: ExcalidrawElement): StoredSearchItem |
 	if (element.isDeleted || element.customData?.hideFromViewOnly) return null;
 
 	if (isTextElement(element)) {
-		return makeSearchItem(element.id, 'excalidraw-text', element.originalText, { x: element.x, y: element.y });
+		return makeSearchItem(element.id, element.originalText, { x: element.x, y: element.y });
 	}
 
 	return null;
@@ -191,7 +186,6 @@ const getTldrawSearchItem = (document: RoomSnapshot['documents'][number]): Store
 
 	return makeSearchItem(
 		record.id,
-		'tldraw-' + (typeof record.type === 'string' ? record.type : 'shape'),
 		text,
 		{
 			x: readNumber(record.x),

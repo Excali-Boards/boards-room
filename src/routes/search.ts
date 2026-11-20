@@ -51,7 +51,6 @@ const itemMatches = (item: StoredSearchItem, tokenHashes: readonly number[], que
 
 	const itemTokens = new Set(item.tokenHashes);
 	if (!tokenHashes.every((tokenHash) => itemTokens.has(tokenHash))) return false;
-	if (item.truncated) return true;
 
 	const words = item.text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [];
 	return queryTokens.every((token) => words.some((word) => word.startsWith(token)));
@@ -60,6 +59,19 @@ const itemMatches = (item: StoredSearchItem, tokenHashes: readonly number[], que
 const boardNameMatches = (name: string, queryTokens: readonly string[]): boolean => {
 	const words = name.toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [];
 	return queryTokens.every((token) => words.some((word) => word.startsWith(token)));
+};
+
+const compareSearchMatches = (first: BoardSearchMatch, second: BoardSearchMatch): number => {
+	const firstHasPosition = typeof first.x === 'number' && typeof first.y === 'number';
+	const secondHasPosition = typeof second.x === 'number' && typeof second.y === 'number';
+	if (firstHasPosition !== secondHasPosition) return firstHasPosition ? -1 : 1;
+	if (!firstHasPosition || !secondHasPosition) return first.elementId.localeCompare(second.elementId);
+
+	const xDifference = second.x! - first.x!;
+	if (Math.abs(xDifference) > 32) return xDifference;
+
+	const yDifference = first.y! - second.y!;
+	return yDifference || first.elementId.localeCompare(second.elementId);
 };
 
 export default [
@@ -185,9 +197,7 @@ export default [
 								if (!itemMatches(item, tokenHashes, queryTokens) || matchesById.has(item.elementId)) continue;
 								matchesById.set(item.elementId, {
 									elementId: item.elementId,
-									kind: item.kind,
 									text: item.text,
-									truncated: item.truncated,
 									...(item.x === undefined ? {} : { x: item.x }),
 									...(item.y === undefined ? {} : { y: item.y }),
 									...(item.pageId ? { pageId: item.pageId } : {}),
@@ -228,7 +238,7 @@ export default [
 						id: row.board.category.categoryId,
 						name: row.board.category.name,
 					},
-					matches: Array.from(matchesById.values()),
+					matches: Array.from(matchesById.values()).sort(compareSearchMatches),
 					indexedAt: row.updatedAt,
 				});
 			}
