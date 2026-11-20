@@ -1,5 +1,4 @@
-import { isFrameLikeElement, isTextElement } from '@excalidraw/excalidraw/element/typeChecks';
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
+import type { ExcalidrawElement, ExcalidrawTextElement } from '@excalidraw/excalidraw/element/types';
 import type { BoardType } from '@prisma/client';
 import type { RoomSnapshot } from '@tldraw/sync';
 import config from '../core/config.js';
@@ -87,6 +86,8 @@ type TldrawRecord = {
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const isTextElement = (element: ExcalidrawElement | null): element is ExcalidrawTextElement => element?.type === 'text';
 
 const normalizeText = (value: string): string => value.replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -176,10 +177,6 @@ const getExcalidrawSearchItem = (element: ExcalidrawElement): StoredSearchItem |
 		return makeSearchItem(element.id, 'excalidraw-text', element.originalText, { x: element.x, y: element.y });
 	}
 
-	if (isFrameLikeElement(element)) {
-		return makeSearchItem(element.id, 'excalidraw-frame', element.name || '', { x: element.x, y: element.y });
-	}
-
 	return null;
 };
 
@@ -189,7 +186,7 @@ const getTldrawSearchItem = (document: RoomSnapshot['documents'][number]): Store
 
 	const props = isRecord(record.props) ? record.props : {};
 	const richText = extractRichText(props.richText).join(' ');
-	const text = richText || readString(props.text) || (record.type === 'frame' ? readString(props.name) : undefined);
+	const text = richText || readString(props.text);
 	if (!text) return null;
 
 	return makeSearchItem(
