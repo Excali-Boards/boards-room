@@ -1,5 +1,5 @@
 import { ActionType, BareBoard, ClientToServerEvents, FileActionData, RecentlyActiveRoom, RoomData, ServerToClientEvents, SnapshotData } from '../types.js';
-import { getSceneVersion, hashElementsVersion, isInitializedImageElement, newElementWith, reconcileElements } from '../other/excalidraw.js';
+import { getSceneVersion, hashElementsVersion, isInitializedImageElement, newElementWith, reconcileElements, sanitizeExcalidrawElements } from '../other/excalidraw.js';
 import { compressionUtils, resolveClientIp } from '../modules/functions.js';
 import { getExcalidrawSearchChanges, getTldrawSearchChanges } from './search.js';
 import { DBUserPartial, DBUserPartialType } from '../other/vars.js';
@@ -351,7 +351,8 @@ export class ExcalidrawSocket {
 
 		try {
 			const body = await this.socket.manager.files.readableToBuffer(s3File.Body as Readable);
-			return compressionUtils.decompressAndDecrypt<RoomData<'Excalidraw'>['elements']>(body);
+			const elements = compressionUtils.decompressAndDecrypt<RoomData<'Excalidraw'>['elements']>(body);
+			return sanitizeExcalidrawElements(elements);
 		} catch (error) {
 			this.socket.manager.prometheus.recordError('board_load_error', 'socket');
 			this.roomData.delete(boardId);

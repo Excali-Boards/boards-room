@@ -20,16 +20,41 @@ export function hashElementsVersion(elements: readonly ExcalidrawElement[]): num
 
 export const getSceneVersion = (elements: readonly ExcalidrawElement[]) => elements.reduce((acc, el) => acc + el.version, 0);
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+export const isValidExcalidrawElement = (element?: ExcalidrawElement | null): boolean => {
+	if (!element) return false;
+
+	if (![element.x, element.y, element.width, element.height, element.angle, element.version, element.versionNonce, element.updated].every(isFiniteNumber)) {
+		return false;
+	}
+
+	if (element.type === 'line' || element.type === 'arrow' || element.type === 'freedraw') {
+		return Array.isArray(element.points) && element.points.every((point) =>
+			Array.isArray(point) && point.length >= 2 && isFiniteNumber(point[0]) && isFiniteNumber(point[1]),
+		);
+	}
+
+	return true;
+};
+
+export const sanitizeExcalidrawElements = (
+	elements: readonly ExcalidrawElement[],
+): ExcalidrawElement[] => elements.filter(isValidExcalidrawElement);
+
 export const reconcileElements = (
 	localElements: readonly ExcalidrawElement[],
 	remoteElements: readonly ExcalidrawElement[],
 	localAppState?: AppState,
 ): ReconciledExcalidrawElement[] => {
-	const localElementsMap = arrayToMap(localElements);
+	const validLocalElements = sanitizeExcalidrawElements(localElements);
+	const localElementsMap = arrayToMap(validLocalElements);
 	const reconciledElements: ExcalidrawElement[] = [];
 	const added = new Set<string>();
 
 	for (const remoteElement of remoteElements) {
+		if (!isValidExcalidrawElement(remoteElement)) continue;
+
 		if (!added.has(remoteElement.id)) {
 			const localElement = localElementsMap.get(remoteElement.id);
 			const discardRemoteElement = shouldDiscardRemoteElement(
@@ -48,7 +73,7 @@ export const reconcileElements = (
 		}
 	}
 
-	for (const localElement of localElements) {
+	for (const localElement of validLocalElements) {
 		if (!added.has(localElement.id)) {
 			reconciledElements.push(localElement);
 			added.add(localElement.id);
